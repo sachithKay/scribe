@@ -24,21 +24,25 @@ defmodule SocialScribe.Workers.BotStatusPoller do
 
   defp poll_and_process_bot(bot_record) do
     case RecallApi.get_bot(bot_record.recall_bot_id) do
-      {:ok, %Tesla.Env{body: bot_api_info}} ->
-        new_status =
-          bot_api_info
-          |> Map.get(:status_changes)
-          |> List.last()
-          |> Map.get(:code)
+      {:ok, %Tesla.Env{body: bot_api_info, status: status_code}} when status_code in 200..299 ->
+        status_changes = Map.get(bot_api_info, :status_changes, [])
+        new_status = if Enum.empty?(status_changes), do: bot_record.status, else: List.last(status_changes) |> Map.get(:code)
 
-        {:ok, updated_bot_record} = Bots.update_recall_bot(bot_record, %{status: new_status})
+        Logger.info("RAW BOT INFO FETCHED for #{bot_record.recall_bot_id}: #{inspect(bot_api_info, pretty: true, limit: :infinity)}")
 
-        if new_status == "done" &&
-             is_nil(Meetings.get_meeting_by_recall_bot_id(updated_bot_record.id)) do
-          process_completed_bot(updated_bot_record, bot_api_info)
-        else
-          if new_status != bot_record.status do
+        if new_status && new_status != bot_record.status do
+          {:ok, updated_bot_record} = Bots.update_recall_bot(bot_record, %{status: new_status})
+
+          if new_status == "done" &&
+               is_nil(Meetings.get_meeting_by_recall_bot_id(updated_bot_record.id)) do
+            process_completed_bot(updated_bot_record, bot_api_info)
+          else
             Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
+          end
+        else
+          # If status didn't change but the API says it's done and not processed yet, process it.
+          if new_status == "done" && is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) do
+            process_completed_bot(bot_record, bot_api_info)
           end
         end
 

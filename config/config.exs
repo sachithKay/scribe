@@ -86,7 +86,8 @@ config :ueberauth, Ueberauth,
       {Ueberauth.Strategy.Google,
        [
          default_scope: "email profile https://www.googleapis.com/auth/calendar.readonly",
-         extra_params: [access_type: "offline", prompt: "consent"]
+         access_type: "offline",
+         prompt: "consent"
        ]},
     linkedin:
       {Ueberauth.Strategy.LinkedIn, [default_scope: "openid profile email w_member_social"]},
@@ -99,6 +100,11 @@ config :ueberauth, Ueberauth,
       {Ueberauth.Strategy.Hubspot,
        [
          default_scope: "crm.objects.contacts.read crm.objects.contacts.write oauth"
+       ]},
+    salesforce:
+      {Ueberauth.Strategy.Salesforce,
+       [
+         default_scope: "api refresh_token offline_access"
        ]}
   ]
 

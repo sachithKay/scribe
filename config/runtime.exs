@@ -41,6 +41,11 @@ config :ueberauth, Ueberauth.Strategy.Hubspot.OAuth,
   client_id: System.get_env("HUBSPOT_CLIENT_ID"),
   client_secret: System.get_env("HUBSPOT_CLIENT_SECRET")
 
+config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
+  client_id: System.get_env("SALESFORCE_CLIENT_ID"),
+  client_secret: System.get_env("SALESFORCE_CLIENT_SECRET"),
+  redirect_uri: System.get_env("SALESFORCE_REDIRECT_URI") || "http://localhost:4000/auth/salesforce/callback"
+
 if System.get_env("PHX_SERVER") do
   config :social_scribe, SocialScribeWeb.Endpoint, server: true
 end
@@ -116,6 +121,9 @@ if config_env() == :prod do
 
   config :ueberauth, Ueberauth.Strategy.Google.OAuth,
     redirect_uri: "https://" <> host <> "/auth/google/callback"
+
+  config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
+    redirect_uri: "https://" <> host <> "/auth/salesforce/callback"
 
   # ## SSL Support
   #

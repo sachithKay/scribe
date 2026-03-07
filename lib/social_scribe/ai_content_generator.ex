@@ -46,7 +46,7 @@ defmodule SocialScribe.AIContentGenerator do
   end
 
   @impl SocialScribe.AIContentGeneratorApi
-  def generate_hubspot_suggestions(meeting) do
+  def generate_crm_suggestions(meeting, provider_name) do
     case Meetings.generate_prompt_for_meeting(meeting) do
       {:error, reason} ->
         {:error, reason}
@@ -55,7 +55,7 @@ defmodule SocialScribe.AIContentGenerator do
         prompt = """
         You are an AI assistant that extracts contact information updates from meeting transcripts.
 
-        Analyze the following meeting transcript and extract any information that could be used to update a CRM contact record.
+        Analyze the following meeting transcript and extract any information that could be used to update a #{String.capitalize(to_string(provider_name))} contact record.
 
         Look for mentions of:
         - Phone numbers (phone, mobilephone)
@@ -72,7 +72,7 @@ defmodule SocialScribe.AIContentGenerator do
         The transcript includes timestamps in [MM:SS] format at the start of each line.
 
         Return your response as a JSON array of objects. Each object should have:
-        - "field": the CRM field name (use exactly: firstname, lastname, email, phone, mobilephone, company, jobtitle, address, city, state, zip, country, website, linkedin_url, twitter_handle)
+        - "field": the CRM field name (use standard #{String.capitalize(to_string(provider_name))} fields, for example: firstname, lastname, email, phone, mobilephone, company, jobtitle, address, city, state, zip, country, website, linkedin_url, twitter_handle)
         - "value": the extracted value
         - "context": a brief quote of where this was mentioned
         - "timestamp": the timestamp in MM:SS format where this was mentioned
@@ -93,7 +93,7 @@ defmodule SocialScribe.AIContentGenerator do
 
         case call_gemini(prompt) do
           {:ok, response} ->
-            parse_hubspot_suggestions(response)
+            parse_crm_suggestions(response)
 
           {:error, reason} ->
             {:error, reason}
@@ -101,7 +101,7 @@ defmodule SocialScribe.AIContentGenerator do
     end
   end
 
-  defp parse_hubspot_suggestions(response) do
+  defp parse_crm_suggestions(response) do
     # Clean up the response - remove markdown code blocks if present
     cleaned =
       response
