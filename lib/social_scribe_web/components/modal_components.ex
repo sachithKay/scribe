@@ -551,25 +551,25 @@ defmodule SocialScribeWeb.ModalComponents do
   end
 
   @doc """
-  Renders a HubSpot-styled modal wrapper.
+  Renders a CRM-styled modal wrapper.
 
-  This is a specialized modal with HubSpot-specific styling:
+  This is a specialized modal with CRM-specific styling:
   - Custom overlay color
   - Reduced padding
   - No close button (relies on Cancel button in footer)
 
   ## Examples
 
-      <.hubspot_modal id="hubspot-modal" show on_cancel={JS.patch(~p"/back")}>
+      <.crm_modal id="crm-modal" show on_cancel={JS.patch(~p"/back")}>
         Modal content here
-      </.hubspot_modal>
+      </.crm_modal>
   """
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, JS, default: %JS{}
   slot :inner_block, required: true
 
-  def hubspot_modal(assigns) do
+  def crm_modal(assigns) do
     ~H"""
     <div
       id={@id}

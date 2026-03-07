@@ -4,7 +4,7 @@ defmodule SocialScribe.HubspotApi do
   Implements automatic token refresh on 401/expired token errors.
   """
 
-  @behaviour SocialScribe.HubspotApiBehaviour
+  @behaviour SocialScribe.CRM
 
   alias SocialScribe.Accounts.UserCredential
   alias SocialScribe.HubspotTokenRefresher
@@ -12,6 +12,9 @@ defmodule SocialScribe.HubspotApi do
   require Logger
 
   @base_url "https://api.hubapi.com"
+
+  @impl true
+  def provider_name, do: :hubspot
 
   @contact_properties [
     "firstname",
@@ -48,6 +51,7 @@ defmodule SocialScribe.HubspotApi do
   Returns up to 10 matching contacts with basic properties.
   Automatically refreshes token on 401/expired errors and retries once.
   """
+  @impl true
   def search_contacts(%UserCredential{} = credential, query) when is_binary(query) do
     with_token_refresh(credential, fn cred ->
       body = %{
@@ -74,6 +78,7 @@ defmodule SocialScribe.HubspotApi do
   Gets a single contact by ID with all properties.
   Automatically refreshes token on 401/expired errors and retries once.
   """
+  @impl true
   def get_contact(%UserCredential{} = credential, contact_id) do
     with_token_refresh(credential, fn cred ->
       properties_param = Enum.join(@contact_properties, ",")
@@ -100,6 +105,7 @@ defmodule SocialScribe.HubspotApi do
   `updates` should be a map of property names to new values.
   Automatically refreshes token on 401/expired errors and retries once.
   """
+  @impl true
   def update_contact(%UserCredential{} = credential, contact_id, updates)
       when is_map(updates) do
     with_token_refresh(credential, fn cred ->
@@ -125,6 +131,7 @@ defmodule SocialScribe.HubspotApi do
   Batch updates multiple properties on a contact.
   This is a convenience wrapper around update_contact/3.
   """
+  @impl true
   def apply_updates(%UserCredential{} = credential, contact_id, updates_list)
       when is_list(updates_list) do
     updates_map =

@@ -1,11 +1,11 @@
-defmodule SocialScribe.HubspotSuggestions do
+defmodule SocialScribe.CRMSuggestions do
   @moduledoc """
-  Generates and formats HubSpot contact update suggestions by combining
-  AI-extracted data with existing HubSpot contact information.
+  Generates and formats CRM contact update suggestions by combining
+  AI-extracted data with existing CRM contact information.
   """
 
   alias SocialScribe.AIContentGeneratorApi
-  alias SocialScribe.HubspotApi
+  alias SocialScribe.CRM
   alias SocialScribe.Accounts.UserCredential
 
   @field_labels %{
@@ -27,19 +27,19 @@ defmodule SocialScribe.HubspotSuggestions do
   }
 
   @doc """
-  Generates suggested updates for a HubSpot contact based on a meeting transcript.
+  Generates suggested updates for a CRM contact based on a meeting transcript.
 
   Returns a list of suggestion maps, each containing:
-  - field: the HubSpot field name
+  - field: the CRM field name
   - label: human-readable field label
-  - current_value: the existing value in HubSpot (or nil)
+  - current_value: the existing value in CRM (or nil)
   - new_value: the AI-suggested value
   - context: explanation of where this was found in the transcript
   - apply: boolean indicating whether to apply this update (default false)
   """
-  def generate_suggestions(%UserCredential{} = credential, contact_id, meeting) do
-    with {:ok, contact} <- HubspotApi.get_contact(credential, contact_id),
-         {:ok, ai_suggestions} <- AIContentGeneratorApi.generate_hubspot_suggestions(meeting) do
+  def generate_suggestions(crm_module, %UserCredential{} = credential, contact_id, meeting, provider_name) do
+    with {:ok, contact} <- CRM.get_contact(crm_module, credential, contact_id),
+         {:ok, ai_suggestions} <- AIContentGeneratorApi.generate_crm_suggestions(meeting, provider_name) do
       suggestions =
         ai_suggestions
         |> Enum.map(fn suggestion ->
@@ -66,8 +66,8 @@ defmodule SocialScribe.HubspotSuggestions do
   Generates suggestions without fetching contact data.
   Useful when contact hasn't been selected yet.
   """
-  def generate_suggestions_from_meeting(meeting) do
-    case AIContentGeneratorApi.generate_hubspot_suggestions(meeting) do
+  def generate_suggestions_from_meeting(meeting, provider_name) do
+    case AIContentGeneratorApi.generate_crm_suggestions(meeting, provider_name) do
       {:ok, ai_suggestions} ->
         suggestions =
           ai_suggestions

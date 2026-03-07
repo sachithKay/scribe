@@ -1,0 +1,240 @@
+defmodule SocialScribe.CRM.Salesforce do
+  @moduledoc """
+  Salesforce CRM API client for contacts operations.
+  Implements the SocialScribe.CRM behaviour.
+  Uses the instance_url obtained during OAuth.
+  """
+
+  @behaviour SocialScribe.CRM
+
+  alias SocialScribe.Accounts.UserCredential
+  require Logger
+
+  @impl true
+  def provider_name, do: :salesforce
+
+  # Adjust properties as per standard Salesforce Contact object
+  @contact_properties [
+    "Id",
+    "FirstName",
+    "LastName",
+    "Email",
+    "Phone",
+    "MobilePhone",
+    "Title",
+    "MailingStreet",
+    "MailingCity",
+    "MailingState",
+    "MailingPostalCode",
+    "MailingCountry",
+    "Name"
+  ]
+
+  defp client(access_token, instance_url) do
+    Tesla.client([
+      {Tesla.Middleware.BaseUrl, instance_url},
+      Tesla.Middleware.JSON,
+      {Tesla.Middleware.Headers,
+       [
+         {"Authorization", "Bearer #{access_token}"},
+         {"Content-Type", "application/json"}
+       ]}
+    ])
+  end
+
+  @doc """
+  Searches for contacts by query string using SOSL or SOQL.
+  We use SOQL to find contacts matching the query by name or email.
+  """
+  @impl true
+  def search_contacts(%UserCredential{} = credential, query) when is_binary(query) do
+    with_token_refresh(credential, fn cred ->
+      # Simple SOQL search using LIKE
+      escaped_query = String.replace(query, "'", "\\'")
+      fields = Enum.join(@contact_properties, ", ")
+      soql = "SELECT #{fields} FROM Contact WHERE Name LIKE '%#{escaped_query}%' OR Email LIKE '%#{escaped_query}%' LIMIT 10"
+      
+      url = "/services/data/v60.0/query/?q=" <> URI.encode(soql)
+
+      case Tesla.get(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url) do
+        {:ok, %Tesla.Env{status: 200, body: %{"records" => records}}} ->
+          contacts = Enum.map(records, &format_contact/1)
+          {:ok, contacts}
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          {:error, {:api_error, status, body}}
+
+        {:error, reason} ->
+          {:error, {:http_error, reason}}
+      end
+    end)
+  end
+
+  @doc """
+  Gets a single contact by ID.
+  """
+  @impl true
+  def get_contact(%UserCredential{} = credential, contact_id) do
+    with_token_refresh(credential, fn cred ->
+      fields = Enum.join(@contact_properties, ",")
+      url = "/services/data/v60.0/sobjects/Contact/#{contact_id}?fields=#{fields}"
+
+      case Tesla.get(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url) do
+        {:ok, %Tesla.Env{status: 200, body: body}} ->
+          {:ok, format_contact(body)}
+
+        {:ok, %Tesla.Env{status: 404, body: _body}} ->
+          {:error, :not_found}
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          {:error, {:api_error, status, body}}
+
+        {:error, reason} ->
+          {:error, {:http_error, reason}}
+      end
+    end)
+  end
+
+  @doc """
+  Updates a contact's properties.
+  """
+  @impl true
+  def update_contact(%UserCredential{} = credential, contact_id, updates)
+      when is_map(updates) do
+    with_token_refresh(credential, fn cred ->
+      url = "/services/data/v60.0/sobjects/Contact/#{contact_id}"
+
+      case Tesla.patch(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url, updates) do
+        {:ok, %Tesla.Env{status: status}} when status in [200, 204] ->
+          # fetch again to return the full object, since patch is 204 No Content
+          get_contact(credential, contact_id)
+
+        {:ok, %Tesla.Env{status: 404, body: _body}} ->
+          {:error, :not_found}
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          {:error, {:api_error, status, body}}
+
+        {:error, reason} ->
+          {:error, {:http_error, reason}}
+      end
+    end)
+  end
+
+  @doc """
+  Batch updates multiple properties on a contact.
+  """
+  @impl true
+  def apply_updates(%UserCredential{} = credential, contact_id, updates_list)
+      when is_list(updates_list) do
+    updates_map =
+      updates_list
+      |> Enum.filter(fn update -> update[:apply] == true end)
+      |> Enum.reduce(%{}, fn update, acc ->
+        Map.put(acc, update.field, update.new_value)
+      end)
+
+    if map_size(updates_map) > 0 do
+      update_contact(credential, contact_id, updates_map)
+    else
+      {:ok, :no_updates}
+    end
+  end
+
+  # Format a Salesforce contact response into the generic structure used by SocialScribe modals
+  defp format_contact(properties) when is_map(properties) do
+    %{
+      id: properties["Id"],
+      firstname: properties["FirstName"],
+      lastname: properties["LastName"],
+      email: properties["Email"],
+      phone: properties["Phone"],
+      mobilephone: properties["MobilePhone"],
+      company: nil, # Account handles company in SF out of standard Contact
+      jobtitle: properties["Title"],
+      address: properties["MailingStreet"],
+      city: properties["MailingCity"],
+      state: properties["MailingState"],
+      zip: properties["MailingPostalCode"],
+      country: properties["MailingCountry"],
+      website: nil, 
+      linkedin_url: nil,
+      twitter_handle: nil,
+      display_name: properties["Name"] || "#{properties["FirstName"]} #{properties["LastName"]}"
+    }
+  end
+  defp format_contact(_), do: nil
+
+  # Wrapper that handles token refresh on auth errors
+  defp with_token_refresh(%UserCredential{} = credential, api_call) do
+    case ensure_valid_token(credential) do
+      {:ok, valid_cred} ->
+        case api_call.(valid_cred) do
+          {:error, {:api_error, 401, _body}} ->
+            Logger.info("Salesforce token expired (401), refreshing and retrying...")
+            retry_with_fresh_token(valid_cred, api_call)
+          other ->
+            other
+        end
+      {:error, reason} ->
+        {:error, {:token_refresh_failed, reason}}
+    end
+  end
+
+  defp retry_with_fresh_token(credential, api_call) do
+    case refresh_credential(credential) do
+      {:ok, refreshed_credential} ->
+        # Retry the call
+        api_call.(refreshed_credential)
+      {:error, refresh_error} ->
+        Logger.error("Failed to refresh Salesforce token: #{inspect(refresh_error)}")
+        {:error, {:token_refresh_failed, refresh_error}}
+    end
+  end
+
+  defp ensure_valid_token(credential) do
+    buffer_seconds = 300
+    if DateTime.compare(
+         credential.expires_at,
+         DateTime.add(DateTime.utc_now(), buffer_seconds, :second)
+       ) == :lt do
+      refresh_credential(credential)
+    else
+      {:ok, credential}
+    end
+  end
+
+  defp refresh_credential(credential) do
+    config = Application.get_env(:ueberauth, Ueberauth.Strategy.Salesforce.OAuth, [])
+    
+    body = URI.encode_query(%{
+      grant_type: "refresh_token",
+      client_id: config[:client_id],
+      client_secret: config[:client_secret],
+      refresh_token: credential.refresh_token
+    })
+    
+    headers = [{"Content-Type", "application/x-www-form-urlencoded"}]
+
+    case Tesla.post(Tesla.client([Tesla.Middleware.JSON]), "https://login.salesforce.com/services/oauth2/token", body, headers: headers) do
+      {:ok, %Tesla.Env{status: 200, body: response}} ->
+        attrs = %{
+          token: response["access_token"],
+          expires_at: DateTime.add(DateTime.utc_now(), 7200, :second) # SF defaults varies, assume 2 hrs
+        }
+
+        # The refresh_token might not be returned again via SF if existing is good
+        attrs = if response["refresh_token"], do: Map.put(attrs, :refresh_token, response["refresh_token"]), else: attrs
+        # Ensure instance_url is preserved
+        attrs = if response["instance_url"], do: Map.put(attrs, :instance_url, response["instance_url"]), else: attrs
+
+        SocialScribe.Accounts.update_user_credential(credential, attrs)
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, {status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+end

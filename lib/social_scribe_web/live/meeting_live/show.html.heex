@@ -89,7 +89,7 @@
       <% end %>
     </div>
 
-    <div :if={@hubspot_credential} class="bg-white shadow-xl rounded-lg p-6 md:p-8">
+    <div :if={@hubspot_credential} class="bg-white shadow-xl rounded-lg p-6 md:p-8 mb-4">
       <div class="flex justify-between items-center">
         <div>
           <h2 class="text-2xl font-semibold text-slate-700">HubSpot Integration</h2>
@@ -105,6 +105,26 @@
             <path d="M18.72 14.76c.35-.85.54-1.76.54-2.76 0-.72-.11-1.41-.3-2.05-.65.15-1.33.23-2.04.23A9.07 9.07 0 0112 9.9a8.963 8.963 0 01-4.92.28c-.2.64-.3 1.33-.3 2.05 0 1 .19 1.91.54 2.76 1.34-.5 2.75-.79 4.18-.79s2.84.29 4.22.79M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-14c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3" />
           </svg>
           Update HubSpot Contact
+        </.link>
+      </div>
+    </div>
+
+    <div :if={@salesforce_credential} class="bg-white shadow-xl rounded-lg p-6 md:p-8">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-2xl font-semibold text-slate-700">Salesforce Integration</h2>
+          <p class="text-sm text-slate-500 mt-1">
+            Update CRM contacts with information from this meeting
+          </p>
+        </div>
+        <.link
+          patch={~p"/dashboard/meetings/#{@meeting}/salesforce"}
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+        >
+          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.48 7.39c-1.24-2.8-4.27-4.52-7.48-4.27C7.38 3.3 5.25 5.51 5 8.16c-2.88.35-5.06 2.87-4.99 5.79.05 2.15 1.48 4.09 3.53 4.81.42.15.89.24 1.36.24h12.58c3.6 0 6.52-2.92 6.52-6.52 0-3.15-2.26-5.84-5.32-6.42-.3-.06-.6-.08-.9-.08a7 7 0 0 0-.3-1.41zM2.87 14.16c-.73-.55-1.12-1.42-1.04-2.34.12-1.47 1.25-2.65 2.73-2.85l1.04-.14.11-1.05c.24-2.22 2.07-4.01 4.29-4.16 2.45-.17 4.68 1.44 5.29 3.82l.27 1.05h1.08c2.4 0 4.35 1.95 4.35 4.35s-1.95 4.35-4.35 4.35H5.06c-1.12 0-2.14-.49-2.85-1.34a2.91 2.91 0 0 1-.34-1.69h1Z"/>
+          </svg>
+          Update Salesforce Contact
         </.link>
       </div>
     </div>
@@ -155,17 +175,36 @@
   />
 </.modal>
 
-<.hubspot_modal
+<.crm_modal
   :if={@live_action == :hubspot && @hubspot_credential}
   id="hubspot-modal-wrapper"
   show
   on_cancel={JS.patch(~p"/dashboard/meetings/#{@meeting}")}
 >
   <.live_component
-    module={SocialScribeWeb.MeetingLive.HubspotModalComponent}
+    module={SocialScribeWeb.MeetingLive.CrmModalComponent}
     id="hubspot-modal"
     meeting={@meeting}
     credential={@hubspot_credential}
+    provider={:hubspot}
+    provider_name="HubSpot"
     modal_id="hubspot-modal-wrapper"
   />
-</.hubspot_modal>
+</.crm_modal>
+
+<.crm_modal
+  :if={@live_action == :salesforce && @salesforce_credential}
+  id="salesforce-modal-wrapper"
+  show
+  on_cancel={JS.patch(~p"/dashboard/meetings/#{@meeting}")}
+>
+  <.live_component
+    module={SocialScribeWeb.MeetingLive.CrmModalComponent}
+    id="salesforce-modal"
+    meeting={@meeting}
+    credential={@salesforce_credential}
+    provider={:salesforce}
+    provider_name="Salesforce"
+    modal_id="salesforce-modal-wrapper"
+  />
+</.crm_modal>
