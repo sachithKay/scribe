@@ -31,18 +31,13 @@ defmodule SocialScribe.Workers.BotStatusPoller do
         Logger.info("RAW BOT INFO FETCHED for #{bot_record.recall_bot_id}: #{inspect(bot_api_info, pretty: true, limit: :infinity)}")
 
         if new_status && new_status != bot_record.status do
-          {:ok, updated_bot_record} = Bots.update_recall_bot(bot_record, %{status: new_status})
-
           if new_status == "done" &&
-               is_nil(Meetings.get_meeting_by_recall_bot_id(updated_bot_record.id)) do
-            process_completed_bot(updated_bot_record, bot_api_info)
-          else
-            Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
-          end
-        else
-          # If status didn't change but the API says it's done and not processed yet, process it.
-          if new_status == "done" && is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) do
+               is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) do
+            # Process first — only mark "done" after successful meeting creation
             process_completed_bot(bot_record, bot_api_info)
+          else
+            {:ok, _} = Bots.update_recall_bot(bot_record, %{status: new_status})
+            Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
           end
         end
 
@@ -65,6 +60,9 @@ defmodule SocialScribe.Workers.BotStatusPoller do
 
       case Meetings.create_meeting_from_recall_data(bot_record, bot_api_info, transcript_data, participants_data) do
         {:ok, meeting} ->
+          # Mark bot as done only AFTER meeting is successfully created
+          {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "done"})
+
           Logger.info(
             "Successfully created meeting record #{meeting.id} from bot #{bot_record.recall_bot_id}"
           )
@@ -78,6 +76,7 @@ defmodule SocialScribe.Workers.BotStatusPoller do
           Logger.error(
             "Failed to create meeting record from bot #{bot_record.recall_bot_id}: #{inspect(reason)}"
           )
+          # Bot status remains unchanged — poller will retry on the next cycle
       end
     else
       {:error, reason} ->
