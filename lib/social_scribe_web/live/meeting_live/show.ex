@@ -89,16 +89,16 @@ defmodule SocialScribeWeb.MeetingLive.Show do
           contacts: contacts,
           searching: false
         )
+        {:noreply, socket}
 
       {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
-          id: "#{provider_name}-modal",
-          error: "Failed to search contacts: #{inspect(reason)}",
-          searching: false
-        )
+         socket =
+          socket
+          |> put_flash(:error, "Could not search CRM contacts right now. The service may be temporarily unavailable.")
+          |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
+          
+        {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   @impl true
@@ -113,16 +113,16 @@ defmodule SocialScribeWeb.MeetingLive.Show do
           suggestions: merged,
           loading: false
         )
-
-      {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
-          id: "#{provider_name}-modal",
-          error: "Failed to generate suggestions: #{inspect(reason)}",
-          loading: false
-        )
+        {:noreply, socket}
+        
+      {:error, _reason} ->
+         socket =
+          socket
+          |> put_flash(:error, "There was an unexpected error generating suggestions. Please try again.")
+          |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
+          
+        {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   @impl true
@@ -137,13 +137,12 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
         {:noreply, socket}
 
-      {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
-          id: "#{provider_name}-modal",
-          error: "Failed to update contact: #{inspect(reason)}",
-          loading: false
-        )
-
+      {:error, _reason} ->
+         socket =
+          socket
+          |> put_flash(:error, "Failed to apply updates to #{String.capitalize(to_string(provider_name))}. Please verify your connection.")
+          |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
+          
         {:noreply, socket}
     end
   end

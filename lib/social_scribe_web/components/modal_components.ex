@@ -31,7 +31,6 @@ defmodule SocialScribeWeb.ModalComponents do
   attr :open, :boolean, default: false
   attr :query, :string, default: ""
   attr :target, :any, default: nil
-  attr :error, :string, default: nil
   attr :id, :string, default: "contact-select"
 
   def contact_select(assigns) do
@@ -136,7 +135,6 @@ defmodule SocialScribeWeb.ModalComponents do
           </button>
         </div>
       </div>
-      <.inline_error :if={@error} message={@error} />
     </div>
     """
   end

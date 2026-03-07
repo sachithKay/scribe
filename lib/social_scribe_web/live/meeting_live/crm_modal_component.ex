@@ -25,7 +25,6 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           open={@dropdown_open}
           query={@query}
           target={@myself}
-          error={@error}
         />
 
       <%= if @selected_contact do %>
@@ -97,7 +96,6 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
       |> assign_new(:loading, fn -> false end)
       |> assign_new(:searching, fn -> false end)
       |> assign_new(:dropdown_open, fn -> false end)
-      |> assign_new(:error, fn -> nil end)
 
     {:ok, socket}
   end
@@ -113,7 +111,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
     query = String.trim(query)
 
     if String.length(query) >= 2 do
-      socket = assign(socket, searching: true, error: nil, query: query, dropdown_open: true)
+      socket = assign(socket, searching: true, query: query, dropdown_open: true)
       send(self(), {:crm_search, query, socket.assigns.provider, socket.assigns.credential})
       {:noreply, socket}
     else
@@ -152,7 +150,6 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
       socket = assign(socket,
         loading: true,
         selected_contact: contact,
-        error: nil,
         dropdown_open: false,
         query: "",
         suggestions: []
@@ -160,7 +157,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
       send(self(), {:generate_suggestions, contact, socket.assigns.meeting, socket.assigns.provider, socket.assigns.credential})
       {:noreply, socket}
     else
-      {:noreply, assign(socket, error: "Contact not found")}
+      {:noreply, socket}
     end
   end
 
@@ -175,8 +172,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
        searching: false,
        dropdown_open: false,
        contacts: [],
-       query: "",
-       error: nil
+       query: ""
      )}
   end
 
@@ -204,7 +200,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
   @impl true
   def handle_event("apply_updates", %{"apply" => selected, "values" => values}, socket) do
-    socket = assign(socket, loading: true, error: nil)
+    socket = assign(socket, loading: true)
 
     updates =
       selected
@@ -219,6 +215,6 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
 
   @impl true
   def handle_event("apply_updates", _params, socket) do
-    {:noreply, assign(socket, error: "Please select at least one field to update")}
+    {:noreply, socket}
   end
 end
