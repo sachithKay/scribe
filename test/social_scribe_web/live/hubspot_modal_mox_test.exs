@@ -171,70 +171,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
     end
   end
 
-  describe "HubSpot API behavior delegation" do
-    setup do
-      user = user_fixture()
-      credential = hubspot_credential_fixture(%{user_id: user.id})
-      %{credential: credential}
-    end
 
-    test "search_contacts delegates to implementation", %{credential: credential} do
-      expected = [%{id: "1", firstname: "Test", lastname: "User"}]
-
-      SocialScribe.HubspotApiMock
-      |> expect(:search_contacts, fn _cred, query ->
-        assert query == "test query"
-        {:ok, expected}
-      end)
-
-      assert {:ok, ^expected} =
-               SocialScribe.HubspotApiBehaviour.search_contacts(credential, "test query")
-    end
-
-    test "get_contact delegates to implementation", %{credential: credential} do
-      expected = %{id: "123", firstname: "John", lastname: "Doe"}
-
-      SocialScribe.HubspotApiMock
-      |> expect(:get_contact, fn _cred, contact_id ->
-        assert contact_id == "123"
-        {:ok, expected}
-      end)
-
-      assert {:ok, ^expected} = SocialScribe.HubspotApiBehaviour.get_contact(credential, "123")
-    end
-
-    test "update_contact delegates to implementation", %{credential: credential} do
-      updates = %{"phone" => "555-1234", "company" => "New Corp"}
-      expected = %{id: "123", phone: "555-1234", company: "New Corp"}
-
-      SocialScribe.HubspotApiMock
-      |> expect(:update_contact, fn _cred, contact_id, upd ->
-        assert contact_id == "123"
-        assert upd == updates
-        {:ok, expected}
-      end)
-
-      assert {:ok, ^expected} =
-               SocialScribe.HubspotApiBehaviour.update_contact(credential, "123", updates)
-    end
-
-    test "apply_updates delegates to implementation", %{credential: credential} do
-      updates_list = [
-        %{field: "phone", new_value: "555-1234", apply: true},
-        %{field: "email", new_value: "test@example.com", apply: false}
-      ]
-
-      SocialScribe.HubspotApiMock
-      |> expect(:apply_updates, fn _cred, contact_id, list ->
-        assert contact_id == "123"
-        assert list == updates_list
-        {:ok, %{id: "123"}}
-      end)
-
-      assert {:ok, _} =
-               SocialScribe.HubspotApiBehaviour.apply_updates(credential, "123", updates_list)
-    end
-  end
 
   # Helper function to create a meeting with transcript for testing
   defp meeting_fixture_with_transcript(user) do

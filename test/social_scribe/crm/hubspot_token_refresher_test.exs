@@ -1,7 +1,7 @@
 defmodule SocialScribe.HubspotTokenRefresherTest do
   use SocialScribe.DataCase
 
-  alias SocialScribe.HubspotTokenRefresher
+  alias SocialScribe.CRM.Hubspot
   alias SocialScribe.Accounts
 
   import SocialScribe.AccountsFixtures
@@ -16,7 +16,7 @@ defmodule SocialScribe.HubspotTokenRefresherTest do
           expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
         })
 
-      {:ok, result} = HubspotTokenRefresher.ensure_valid_token(credential)
+      {:ok, result} = Hubspot.ensure_valid_token(credential)
 
       assert result.id == credential.id
       assert result.token == credential.token
@@ -31,7 +31,7 @@ defmodule SocialScribe.HubspotTokenRefresherTest do
           expires_at: DateTime.add(DateTime.utc_now(), 600, :second)
         })
 
-      {:ok, result} = HubspotTokenRefresher.ensure_valid_token(credential)
+      {:ok, result} = Hubspot.ensure_valid_token(credential)
 
       assert result.id == credential.id
       assert result.token == credential.token

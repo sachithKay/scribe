@@ -8,7 +8,7 @@ defmodule SocialScribe.Workers.HubspotTokenRefresher do
 
   alias SocialScribe.Repo
   alias SocialScribe.Accounts.UserCredential
-  alias SocialScribe.HubspotTokenRefresher
+  alias SocialScribe.CRM.Hubspot
 
   import Ecto.Query
 
@@ -47,7 +47,7 @@ defmodule SocialScribe.Workers.HubspotTokenRefresher do
   defp refresh_all(credentials) do
     results =
       Enum.map(credentials, fn credential ->
-        case HubspotTokenRefresher.refresh_credential(credential) do
+        case Hubspot.refresh_credential(credential) do
           {:ok, _updated} ->
             Logger.info("Proactively refreshed HubSpot token for credential #{credential.id}")
             :ok

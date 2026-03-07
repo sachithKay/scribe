@@ -147,11 +147,11 @@ defmodule SocialScribeWeb.MeetingLive.Show do
     end
   end
 
-  defp crm_module(:hubspot), do: SocialScribe.HubspotApi
+  defp crm_module(:hubspot), do: SocialScribe.CRM.Hubspot
   defp crm_module(:salesforce), do: SocialScribe.CRM.Salesforce
 
-  defp normalize_contact(contact) do
-    # Contact is already formatted with atom keys from HubspotApi.format_contact
+  defp normalize_contact(contact) when is_map(contact) do
+    # Contact is already formatted with atom keys from the CRM adapter
     contact
   end
 
