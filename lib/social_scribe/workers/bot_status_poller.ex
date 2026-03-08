@@ -26,18 +26,28 @@ defmodule SocialScribe.Workers.BotStatusPoller do
     case RecallApi.get_bot(bot_record.recall_bot_id) do
       {:ok, %Tesla.Env{body: bot_api_info, status: status_code}} when status_code in 200..299 ->
         status_changes = Map.get(bot_api_info, :status_changes, [])
-        new_status = if Enum.empty?(status_changes), do: bot_record.status, else: List.last(status_changes) |> Map.get(:code)
+        new_status =
+          if Enum.empty?(status_changes),
+            do: bot_record.status,
+            else: status_changes |> List.last() |> Map.get(:code)
 
-        Logger.info("RAW BOT INFO FETCHED for #{bot_record.recall_bot_id}: #{inspect(bot_api_info, pretty: true, limit: :infinity)}")
 
         if new_status && new_status != bot_record.status do
-          if new_status == "done" &&
-               is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) do
-            # Process first — only mark "done" after successful meeting creation
-            process_completed_bot(bot_record, bot_api_info)
-          else
-            {:ok, _} = Bots.update_recall_bot(bot_record, %{status: new_status})
-            Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
+          cond do
+            new_status == "done" && is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) ->
+              # Process first — only mark "done" after successful meeting creation
+              process_completed_bot(bot_record, bot_api_info)
+
+            new_status in ["fatal", "media_expired"] ->
+              # These are terminal states where no transcript is available.
+              # Mark them as error so we stop polling them.
+              {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "error"})
+              Logger.warning("Bot #{bot_record.recall_bot_id} reached terminal state '#{new_status}', marking as error.")
+
+            true ->
+              # Normal non-terminal state update (e.g., in_call, joining)
+              {:ok, _} = Bots.update_recall_bot(bot_record, %{status: new_status})
+              Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
           end
         end
 

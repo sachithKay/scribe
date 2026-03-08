@@ -6,7 +6,7 @@ defmodule SocialScribe.AIContentGenerator do
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
 
-  @gemini_model "gemini-2.0-flash-lite"
+  @gemini_model "gemini-2.5-flash"
   @gemini_api_base_url "https://generativelanguage.googleapis.com/v1beta/models"
 
   @impl SocialScribe.AIContentGeneratorApi
@@ -46,16 +46,36 @@ defmodule SocialScribe.AIContentGenerator do
   end
 
   @impl SocialScribe.AIContentGeneratorApi
-  def generate_crm_suggestions(meeting, provider_name) do
+  def generate_crm_suggestions(meeting, provider_name, contact_context \\ nil) do
     case Meetings.generate_prompt_for_meeting(meeting) do
       {:error, reason} ->
         {:error, reason}
 
       {:ok, meeting_prompt} ->
+        # [BUG FIX / CONTEXT]: We pass `contact_context` to Gemini down from the UI. 
+        # Previously, the AI prompt was generic ("Extract CRM updates"). If the transcript 
+        # discussed multiple people (e.g., John from Acme, Sarah from Globex), the AI would 
+        # extract everyone's data and mistakenly suggest applying all of it to the single 
+        # contact the user happened to select.
+        # By providing exact contextual boundaries, we force Gemini to ignore "other" people.
+        target_instructions =
+          if contact_context do
+            name = "#{contact_context.firstname} #{contact_context.lastname}" |> String.trim()
+            company_info = if contact_context.company, do: " (Company: #{contact_context.company})", else: ""
+            """
+            CRITICAL CONTEXT: You must ONLY extract information that belongs to or describes the contact named "#{name}"#{company_info}.
+            If the transcript mentions addresses, phone numbers, or titles for other people, IGNORE THEM COMPLETELY.
+            """
+          else
+            "IMPORTANT: Only extract information that is EXPLICITLY mentioned in the transcript. Do not infer or guess."
+          end
+
         prompt = """
         You are an AI assistant that extracts contact information updates from meeting transcripts.
 
         Analyze the following meeting transcript and extract any information that could be used to update a #{String.capitalize(to_string(provider_name))} contact record.
+
+        #{target_instructions}
 
         Look for mentions of:
         - Phone numbers (phone, mobilephone)
@@ -66,8 +86,6 @@ defmodule SocialScribe.AIContentGenerator do
         - Website URLs (website)
         - LinkedIn profile (linkedin_url)
         - Twitter handle (twitter_handle)
-
-        IMPORTANT: Only extract information that is EXPLICITLY mentioned in the transcript. Do not infer or guess.
 
         The transcript includes timestamps in [MM:SS] format at the start of each line.
 
@@ -154,6 +172,7 @@ defmodule SocialScribe.AIContentGenerator do
 
       case Tesla.post(client(), path, payload) do
         {:ok, %Tesla.Env{status: 200, body: body}} ->
+          # Extracts text from: body["candidates"][0]["content"]["parts"][0]["text"]
           text_path = [
             "candidates",
             Access.at(0),

@@ -47,7 +47,7 @@ defmodule SocialScribe.Workers.HubspotTokenRefresher do
   defp refresh_all(credentials) do
     results =
       Enum.map(credentials, fn credential ->
-        case Hubspot.refresh_credential(credential) do
+        case Hubspot.refresh_token(credential) do
           {:ok, _updated} ->
             Logger.info("Proactively refreshed HubSpot token for credential #{credential.id}")
             :ok

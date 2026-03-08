@@ -158,6 +158,14 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 ---
 
+## 🔗 CRM Integrations
+
+CRM support is built around a unified `SocialScribe.CRM` behaviour (`lib/social_scribe/crm.ex`). Each provider implements the same set of callbacks (`search_contacts`, `get_contact`, `update_contact`, `apply_updates`), allowing the UI and business logic to be shared across integrations.
+
+The shared CRM modal component (`lib/social_scribe_web/live/meeting_live/crm_modal_component.ex`) handles contact search, AI suggestion display, and selective field updates for all providers.
+
+---
+
 ## 🔗 HubSpot Integration
 
 ### HubSpot OAuth Integration
@@ -166,24 +174,36 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 * **OAuth 2.0 Flow:** Handles authorization code flow with HubSpot's `/oauth/authorize` and `/oauth/v1/token` endpoints
 * **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "hubspot"`, including `token`, `refresh_token`, and `expires_at`
 * **Token Refresh:**
-    * `HubspotTokenRefresher` Oban cron worker runs every 5 minutes to proactively refresh tokens expiring within 10 minutes
-    * Internal `with_token_refresh/2` wrapper automatically refreshes expired tokens on API calls and retries the request
-    * Refresh failures are logged; users are prompted to re-authenticate if refresh token is invalid
+    * `SocialScribe.Workers.HubspotTokenRefresher` Oban cron worker runs every 5 minutes to proactively refresh tokens expiring within 5 minutes
+    * Calls `SocialScribe.CRM.Hubspot.refresh_token/1` as the public entry point
+    * Internal `with_token_refresh/2` wrapper in `SocialScribe.CRM.Hubspot` automatically refreshes expired tokens on 401/400 API errors and retries the request
 
-### HubSpot Modal UI
+### HubSpot CRM Module
 
-* **LiveView Component:** Located at `lib/social_scribe_web/live/meeting_live/hubspot_modal_component.ex`
-* **Contact Search:** Debounced input triggers HubSpot API search, results displayed in dropdown
-* **AI Suggestions:** Fetched via `HubspotSuggestions.generate_suggestions` which calls Gemini with transcript context
-* **Suggestion Cards:** Each card displays:
-    * Field label
-    * Current value (strikethrough)
-    * Arrow
-    * Suggested value
-    * Timestamp link
-* **Selective Updates:** Checkbox per field allows selective updates; "Update HubSpot" button disabled until at least one field selected
-* **Form Submission:** Batch-updates selected contact properties via `HubspotApi.update_contact`
-* **Click-away Handler:** Closes dropdown without clearing selection
+* **Module:** `lib/social_scribe/crm/hubspot.ex` — implements the `SocialScribe.CRM` behaviour
+* **Contact Search:** Queries `/crm/v3/objects/contacts/search` with a configurable property list
+* **Contact Get/Update:** Handles `PATCH` to `/crm/v3/objects/contacts/:id`
+* **Data Formatting:** Normalizes HubSpot's string-keyed API response into atom-keyed maps for consistent UI consumption
+
+---
+
+## 🔗 Salesforce Integration
+
+### Salesforce OAuth Integration
+
+* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/salesforce.ex` and `lib/ueberauth/strategy/salesforce/oauth.ex`
+* **OAuth 2.0 Flow:** Handles authorization code flow with Salesforce's `/services/oauth2/authorize` and `/services/oauth2/token` endpoints
+* **Instance URL:** The `instance_url` returned during OAuth is stored in `user_credentials` and used for all subsequent API calls (required for Salesforce's org-specific URLs)
+* **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "salesforce"`, including `token`, `refresh_token`, `expires_at`, and `instance_url`
+* **Token Refresh:** Internal `with_token_refresh/2` wrapper automatically refreshes on 401 errors and retries the request
+
+### Salesforce CRM Module
+
+* **Module:** `lib/social_scribe/crm/salesforce.ex` — implements the `SocialScribe.CRM` behaviour
+* **Contact Search:** Uses SOQL (`SELECT ... FROM Contact WHERE Name LIKE ... OR Email LIKE ...`) via `/services/data/v60.0/query`
+* **Contact Get:** Fetches via `/services/data/v60.0/sobjects/Contact/:id?fields=...`
+* **Contact Update:** Uses `PATCH` to `/services/data/v60.0/sobjects/Contact/:id`; re-fetches the full contact after update since Salesforce returns `204 No Content`
+* **Data Formatting:** Maps Salesforce PascalCase field names (`FirstName`, `MailingStreet`, etc.) to the same atom-keyed structure as HubSpot for consistent UI consumption
 
 ---
 

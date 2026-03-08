@@ -91,7 +91,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         )
         {:noreply, socket}
 
-      {:error, reason} ->
+      {:error, _reason} ->
          socket =
           socket
           |> put_flash(:error, "Could not search CRM contacts right now. The service may be temporarily unavailable.")
@@ -103,9 +103,9 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_info({:generate_suggestions, contact, meeting, provider_name, _credential}, socket) do
-    case CRMSuggestions.generate_suggestions_from_meeting(meeting, provider_name) do
+    case CRMSuggestions.generate_suggestions_from_meeting(meeting, provider_name, contact) do
       {:ok, suggestions} ->
-        merged = CRMSuggestions.merge_with_contact(suggestions, normalize_contact(contact))
+        merged = CRMSuggestions.merge_with_contact(suggestions, contact)
 
         send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
           id: "#{provider_name}-modal",
@@ -150,10 +150,6 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   defp crm_module(:hubspot), do: SocialScribe.CRM.Hubspot
   defp crm_module(:salesforce), do: SocialScribe.CRM.Salesforce
 
-  defp normalize_contact(contact) when is_map(contact) do
-    # Contact is already formatted with atom keys from the CRM adapter
-    contact
-  end
 
   defp format_duration(nil), do: "N/A"
 

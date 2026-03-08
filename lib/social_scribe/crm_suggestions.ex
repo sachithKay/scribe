@@ -66,8 +66,8 @@ defmodule SocialScribe.CRMSuggestions do
   Generates suggestions without fetching contact data.
   Useful when contact hasn't been selected yet.
   """
-  def generate_suggestions_from_meeting(meeting, provider_name) do
-    case AIContentGeneratorApi.generate_crm_suggestions(meeting, provider_name) do
+  def generate_suggestions_from_meeting(meeting, provider_name, contact \\ nil) do
+    case AIContentGeneratorApi.generate_crm_suggestions(meeting, provider_name, contact) do
       {:ok, ai_suggestions} ->
         suggestions =
           ai_suggestions

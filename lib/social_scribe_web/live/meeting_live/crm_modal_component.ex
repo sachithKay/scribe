@@ -6,7 +6,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   @impl true
   def render(assigns) do
     assigns = assign(assigns, :patch, ~p"/dashboard/meetings/#{assigns.meeting}")
-    assigns = assign_new(assigns, :modal_id, fn -> "hubspot-modal-wrapper" end)
+    assigns = assign_new(assigns, :modal_id, fn -> "crm-modal-wrapper" end)
 
     ~H"""
     <div class="space-y-6">
@@ -33,6 +33,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
           loading={@loading}
           myself={@myself}
           patch={@patch}
+          provider_name={@provider_name}
         />
       <% end %>
     </div>
@@ -43,6 +44,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponent do
   attr :loading, :boolean, required: true
   attr :myself, :any, required: true
   attr :patch, :string, required: true
+  attr :provider_name, :any, required: true
 
   defp suggestions_section(assigns) do
     assigns = assign(assigns, :selected_count, Enum.count(assigns.suggestions, & &1.apply))

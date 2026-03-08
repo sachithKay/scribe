@@ -102,8 +102,12 @@ defmodule SocialScribeWeb.UserSettingsLive do
 
         {:noreply, socket}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset, action: :validate))}
+      {:error, _changeset} ->
+        socket =
+          socket
+          |> put_flash(:error, "Could not select Facebook page. Please try again.")
+
+        {:noreply, socket}
     end
   end
 

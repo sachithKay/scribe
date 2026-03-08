@@ -239,7 +239,13 @@ defmodule SocialScribe.CRM.Hubspot do
     end
   end
 
-  def ensure_valid_token(credential) do
+  @doc """
+  Public entry point for proactive token refresh by background workers.
+  Returns `{:ok, updated_credential}` or `{:error, reason}`.
+  """
+  def refresh_token(credential), do: refresh_credential(credential)
+
+  defp ensure_valid_token(credential) do
     buffer_seconds = 300
 
     if DateTime.compare(
@@ -252,7 +258,7 @@ defmodule SocialScribe.CRM.Hubspot do
     end
   end
 
-  def refresh_credential(credential) do
+  defp refresh_credential(credential) do
     config = Application.get_env(:ueberauth, Ueberauth.Strategy.Hubspot.OAuth, [])
     
     body = %{

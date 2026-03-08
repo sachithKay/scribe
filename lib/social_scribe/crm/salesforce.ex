@@ -13,6 +13,9 @@ defmodule SocialScribe.CRM.Salesforce do
   @impl true
   def provider_name, do: :salesforce
 
+  # Default token lifetime to assume when Salesforce doesn't return expires_in
+  @default_token_expiry_seconds 7200
+
   # Adjust properties as per standard Salesforce Contact object
   @contact_properties [
     "Id",
@@ -42,6 +45,13 @@ defmodule SocialScribe.CRM.Salesforce do
     ])
   end
 
+  defp token_client do
+    Tesla.client([
+      {Tesla.Middleware.FormUrlencoded, encode: &Plug.Conn.Query.encode/1, decode: &Plug.Conn.Query.decode/1},
+      Tesla.Middleware.JSON
+    ])
+  end
+
   @doc """
   Searches for contacts by query string using SOSL or SOQL.
   We use SOQL to find contacts matching the query by name or email.
@@ -50,6 +60,7 @@ defmodule SocialScribe.CRM.Salesforce do
   def search_contacts(%UserCredential{} = credential, query) when is_binary(query) do
     with_token_refresh(credential, fn cred ->
       # Simple SOQL search using LIKE
+      # Escape single quotes to prevent SOQL injection
       escaped_query = String.replace(query, "'", "\\'")
       fields = Enum.join(@contact_properties, ", ")
       soql = "SELECT #{fields} FROM Contact WHERE Name LIKE '%#{escaped_query}%' OR Email LIKE '%#{escaped_query}%' LIMIT 10"
@@ -101,10 +112,46 @@ defmodule SocialScribe.CRM.Salesforce do
   @impl true
   def update_contact(%UserCredential{} = credential, contact_id, updates)
       when is_map(updates) do
+    # Map from our normalized keys back to Salesforce SObject fields
+    sf_updates =
+      updates
+      |> Enum.map(fn {k, v} ->
+        sf_key =
+          case to_string(k) do
+            "firstname" -> "FirstName"
+            "lastname" -> "LastName"
+            "email" -> "Email"
+            "phone" -> "Phone"
+            "mobilephone" -> "MobilePhone"
+            "jobtitle" -> "Title"
+            "address" -> "MailingStreet"
+            "city" -> "MailingCity"
+            "state" -> "MailingState"
+            "zip" -> "MailingPostalCode"
+            "country" -> "MailingCountry"
+            other -> other
+          end
+
+        {sf_key, v}
+      end)
+      |> Enum.into(%{})
+
+    # Strip out fields that Salesforce Contacts strictly don't have (website/company)
+    # AND strip out State/Country to avoid FIELD_INTEGRITY_EXCEPTION from Org Picklist Validation rules.
+    # The safest best-practice approach for broad Integrations without Org Metadata access is to
+    # omit state/country fields or require the user to manually configure state mapping.
+    sf_updates_clean = Map.drop(sf_updates, [
+      "website", 
+      "company", 
+      "linkedin_url", 
+      "twitter_handle",
+      "MailingState",
+      "MailingCountry"
+    ])
+
     with_token_refresh(credential, fn cred ->
       url = "/services/data/v60.0/sobjects/Contact/#{contact_id}"
-
-      case Tesla.patch(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url, updates) do
+      case Tesla.patch(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url, sf_updates_clean) do
         {:ok, %Tesla.Env{status: status}} when status in [200, 204] ->
           # fetch again to return the full object, since patch is 204 No Content
           get_contact(credential, contact_id)
@@ -214,16 +261,11 @@ defmodule SocialScribe.CRM.Salesforce do
       refresh_token: credential.refresh_token
     }
 
-    client = Tesla.client([
-      {Tesla.Middleware.FormUrlencoded, encode: &Plug.Conn.Query.encode/1, decode: &Plug.Conn.Query.decode/1},
-      Tesla.Middleware.JSON
-    ])
-
-    case Tesla.post(client, "https://login.salesforce.com/services/oauth2/token", body) do
+    case Tesla.post(token_client(), "https://login.salesforce.com/services/oauth2/token", body) do
       {:ok, %Tesla.Env{status: 200, body: response}} ->
         attrs = %{
           token: response["access_token"],
-          expires_at: DateTime.add(DateTime.utc_now(), 7200, :second) # SF defaults varies, assume 2 hrs
+          expires_at: DateTime.add(DateTime.utc_now(), @default_token_expiry_seconds, :second)
         }
 
         # The refresh_token might not be returned again via SF if existing is good
