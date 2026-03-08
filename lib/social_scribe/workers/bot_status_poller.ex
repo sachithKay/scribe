@@ -89,6 +89,11 @@ defmodule SocialScribe.Workers.BotStatusPoller do
           # Bot status remains unchanged — poller will retry on the next cycle
       end
     else
+      {:error, :no_recordings} ->
+        # If there are no recordings, the meeting likely never started. 
+        # We mark it as "error" so the poller stops trying to fetch data in an infinite loop.
+        Logger.warning("Bot #{bot_record.recall_bot_id} completed but had no recordings. Marking as error.")
+        {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "error"})
       {:error, reason} ->
         Logger.error(
           "Failed to fetch data for bot #{bot_record.recall_bot_id} after completion: #{inspect(reason)}"

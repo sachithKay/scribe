@@ -90,7 +90,7 @@ config :ueberauth, Ueberauth,
          prompt: "consent"
        ]},
     linkedin:
-      {Ueberauth.Strategy.LinkedIn, [default_scope: "openid profile email w_member_social"]},
+      {SocialScribe.Ueberauth.Strategy.LinkedIn, []},
     facebook:
       {Ueberauth.Strategy.Facebook,
        [
@@ -104,7 +104,8 @@ config :ueberauth, Ueberauth,
     salesforce:
       {Ueberauth.Strategy.Salesforce,
        [
-         default_scope: "api refresh_token offline_access"
+         default_scope: "api refresh_token offline_access",
+         prompt: "login consent"
        ]}
   ]
 

@@ -72,15 +72,38 @@ defmodule SocialScribeWeb.AuthController do
 
     case Accounts.find_or_create_user_credential(user, auth) do
       {:ok, credential} ->
-        case FacebookApi.fetch_user_pages(credential.uid, credential.token) do
+        # Exchange the short-lived user token (1h) for a long-lived token (~60 days).
+        # Pages fetched using a long-lived user token return PERMANENT page_access_tokens.
+        # This is Meta's documented production approach.
+        # See: https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
+        app_id = Application.get_env(:ueberauth, Ueberauth.Strategy.Facebook.OAuth)[:client_id]
+        app_secret = Application.get_env(:ueberauth, Ueberauth.Strategy.Facebook.OAuth)[:client_secret]
+
+        effective_token =
+          case FacebookApi.exchange_for_long_lived_token(credential.token, app_id, app_secret) do
+            {:ok, long_lived_token} ->
+              # Persist the long-lived token so future page fetches also use it
+              case Accounts.update_user_credential(credential, %{token: long_lived_token}) do
+                {:ok, _} -> :ok
+                {:error, reason} ->
+                  Logger.error("Failed to persist long-lived Facebook token for user #{credential.user_id}: #{inspect(reason)}")
+              end
+
+              long_lived_token
+
+            {:error, reason} ->
+              Logger.warning("Could not exchange for long-lived Facebook token: #{reason}. Using short-lived token.")
+              credential.token
+          end
+
+        case FacebookApi.fetch_user_pages(credential.uid, effective_token) do
           {:ok, facebook_pages} ->
-            facebook_pages
-            |> Enum.each(fn page ->
+            Enum.each(facebook_pages, fn page ->
               Accounts.link_facebook_page(user, credential, page)
             end)
 
-          _ ->
-            :ok
+          {:error, reason} ->
+            Logger.warning("Could not fetch Facebook pages after OAuth: #{reason}")
         end
 
         conn
@@ -192,12 +215,43 @@ defmodule SocialScribeWeb.AuthController do
     end
   end
 
-  def callback(conn, _params) do
-    Logger.error("OAuth Login")
-    Logger.error(conn)
 
-    conn
-    |> put_flash(:error, "There was an error signing you in. Please try again.")
-    |> redirect(to: ~p"/")
+  def callback(%{assigns: %{ueberauth_failure: failure}} = conn, _params) do
+    provider = String.capitalize(conn.params["provider"] || "account")
+    
+    # Log the full failure struct (contains OAuth error codes and descriptions).
+    # This is critical for diagnosing issues like redirect_uri mismatches or invalid client secrets.
+    Logger.error("#{provider} OAuth Failure Details: #{inspect(failure)}")
+
+    case conn.assigns[:current_user] do
+      nil ->
+        # User was likely trying to Sign In and failed. Send to landing page.
+        conn
+        |> put_flash(:error, "Failed to connect #{provider}. Please try again.")
+        |> redirect(to: ~p"/")
+
+      _user ->
+        # User was already logged in and trying to Link an account.
+        # Send back to settings so they don't lose their session context.
+        conn
+        |> put_flash(:error, "Failed to connect #{provider}. Please try again.")
+        |> redirect(to: ~p"/dashboard/settings")
+    end
+  end
+
+  def callback(conn, _params) do
+    Logger.error("Unknown OAuth Callback State")
+
+    case conn.assigns[:current_user] do
+      nil ->
+        conn
+        |> put_flash(:error, "There was an error signing you in. Please try again.")
+        |> redirect(to: ~p"/")
+
+      _user ->
+        conn
+        |> put_flash(:error, "There was an error with the authentication request.")
+        |> redirect(to: ~p"/dashboard/settings")
+    end
   end
 end

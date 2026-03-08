@@ -23,7 +23,7 @@ config :ueberauth, Ueberauth.Strategy.Google.OAuth,
   client_secret: System.get_env("GOOGLE_CLIENT_SECRET"),
   redirect_uri: System.get_env("GOOGLE_REDIRECT_URI")
 
-config :ueberauth, Ueberauth.Strategy.LinkedIn.OAuth,
+config :ueberauth, SocialScribe.Ueberauth.Strategy.LinkedIn.OAuth,
   client_id: System.get_env("LINKEDIN_CLIENT_ID"),
   client_secret: System.get_env("LINKEDIN_CLIENT_SECRET"),
   redirect_uri: System.get_env("LINKEDIN_REDIRECT_URI")
@@ -43,8 +43,7 @@ config :ueberauth, Ueberauth.Strategy.Hubspot.OAuth,
 
 config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
   client_id: System.get_env("SALESFORCE_CLIENT_ID"),
-  client_secret: System.get_env("SALESFORCE_CLIENT_SECRET"),
-  redirect_uri: System.get_env("SALESFORCE_REDIRECT_URI") || "http://localhost:4000/auth/salesforce/callback"
+  client_secret: System.get_env("SALESFORCE_CLIENT_SECRET")
 
 if System.get_env("PHX_SERVER") do
   config :social_scribe, SocialScribeWeb.Endpoint, server: true
@@ -109,6 +108,7 @@ if config_env() == :prod do
 
   config :social_scribe, SocialScribeWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    force_ssl: [rewrite_on: [:x_forwarded_proto]],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
@@ -121,6 +121,7 @@ if config_env() == :prod do
 
   config :ueberauth, Ueberauth.Strategy.Google.OAuth,
     redirect_uri: "https://" <> host <> "/auth/google/callback"
+
 
   config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
     redirect_uri: "https://" <> host <> "/auth/salesforce/callback"

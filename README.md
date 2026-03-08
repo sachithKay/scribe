@@ -207,6 +207,15 @@ The shared CRM modal component (`lib/social_scribe_web/live/meeting_live/crm_mod
 
 ---
 
+## 🔗 LinkedIn Integration
+
+### Custom LinkedIn OAuth Strategy
+
+* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/linkedin.ex` and `lib/ueberauth/strategy/linkedin/oauth.ex`
+* **Why Custom?:** The open-source `ueberauth_linkedin` library forces the `client_secret` into GET request URLs, creating a security leak that causes connection failures in production. Additionally, it does not fully support LinkedIn's modern OpenID Connect (OIDC) endpoints. This custom namespaced strategy (`SocialScribe.Ueberauth.Strategy.LinkedIn`) was created to safely exchange tokens and properly map OIDC claims.
+
+---
+
 ## ⚠️ Known Issues & Limitations
 
 * **Facebook Posting & App Review:**

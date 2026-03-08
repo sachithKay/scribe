@@ -65,7 +65,7 @@ defmodule SocialScribe.CRM.Salesforce do
       fields = Enum.join(@contact_properties, ", ")
       soql = "SELECT #{fields} FROM Contact WHERE Name LIKE '%#{escaped_query}%' OR Email LIKE '%#{escaped_query}%' LIMIT 10"
       
-      url = "/services/data/v60.0/query/?q=" <> URI.encode(soql)
+      url = "/services/data/v60.0/query?q=" <> URI.encode(soql)
 
       case Tesla.get(client(cred.token, cred.instance_url || "https://login.salesforce.com"), url) do
         {:ok, %Tesla.Env{status: 200, body: %{"records" => records}}} ->
@@ -73,9 +73,11 @@ defmodule SocialScribe.CRM.Salesforce do
           {:ok, contacts}
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
+          Logger.error("Salesforce Search API Error (Status: #{status}): #{inspect(body)}")
           {:error, {:api_error, status, body}}
 
         {:error, reason} ->
+          Logger.error("Salesforce Search HTTP Error: #{inspect(reason)}")
           {:error, {:http_error, reason}}
       end
     end)
@@ -218,7 +220,7 @@ defmodule SocialScribe.CRM.Salesforce do
       {:ok, valid_cred} ->
         case api_call.(valid_cred) do
           {:error, {:api_error, 401, _body}} ->
-            Logger.info("Salesforce token expired (401), refreshing and retrying...")
+            Logger.debug("Salesforce token expired (401), refreshing and retrying...")
             retry_with_fresh_token(valid_cred, api_call)
           other ->
             other
@@ -253,33 +255,59 @@ defmodule SocialScribe.CRM.Salesforce do
 
   defp refresh_credential(credential) do
     config = Application.get_env(:ueberauth, Ueberauth.Strategy.Salesforce.OAuth, [])
-    
-    body = %{
-      grant_type: "refresh_token",
-      client_id: config[:client_id],
-      client_secret: config[:client_secret],
-      refresh_token: credential.refresh_token
-    }
+    client_id = config[:client_id]
+    client_secret = config[:client_secret]
 
-    case Tesla.post(token_client(), "https://login.salesforce.com/services/oauth2/token", body) do
-      {:ok, %Tesla.Env{status: 200, body: response}} ->
-        attrs = %{
-          token: response["access_token"],
-          expires_at: DateTime.add(DateTime.utc_now(), @default_token_expiry_seconds, :second)
-        }
+    # Diagnostic: Check for missing config
+    if is_nil(client_id) || is_nil(client_secret) do
+      Logger.error("Salesforce Refresh Failed: SALESFORCE_CLIENT_ID or SECRET is missing from config.")
+      {:error, :missing_config}
+    else
+      # Determine the auth host. Standard is login.salesforce.com. 
+      # Sandboxes and some Orgs require test.salesforce.com.
+      auth_host = 
+        if String.contains?(credential.instance_url || "", ["sandbox", "--"]) do
+          "test.salesforce.com"
+        else
+          "login.salesforce.com"
+        end
 
-        # The refresh_token might not be returned again via SF if existing is good
-        attrs = if response["refresh_token"], do: Map.put(attrs, :refresh_token, response["refresh_token"]), else: attrs
-        # Ensure instance_url is preserved
-        attrs = if response["instance_url"], do: Map.put(attrs, :instance_url, response["instance_url"]), else: attrs
+      body = %{
+        grant_type: "refresh_token",
+        client_id: client_id,
+        client_secret: client_secret,
+        refresh_token: credential.refresh_token
+      }
 
-        SocialScribe.Accounts.update_user_credential(credential, attrs)
+      url = "https://#{auth_host}/services/oauth2/token"
 
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, {status, body}}
+      case Tesla.post(token_client(), url, body) do
+        {:ok, %Tesla.Env{status: 200, body: response}} ->
+          # Use expires_in from response if available, otherwise fallback to default
+          expires_in = response["expires_in"] || @default_token_expiry_seconds
+          
+          attrs = %{
+            token: response["access_token"],
+            expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
+          }
 
-      {:error, reason} ->
-        {:error, reason}
+          # The refresh_token might not be returned again via SF if existing is good
+          attrs = if response["refresh_token"], do: Map.put(attrs, :refresh_token, response["refresh_token"]), else: attrs
+          # Ensure instance_url is preserved
+          attrs = if response["instance_url"], do: Map.put(attrs, :instance_url, response["instance_url"]), else: attrs
+
+          SocialScribe.Accounts.update_user_credential(credential, attrs)
+
+        {:ok, %Tesla.Env{status: status, body: body}} ->
+          # invalid_grant often means the refresh_token belongs to a DIFFERENT Client ID 
+          # (e.g. from local .env while database is shared with Prod)
+          Logger.error("Salesforce Refresh Failed (Status: #{status}): #{inspect(body)}. Hint: Ensure Client ID in Fly.io matches the one used to connect this account.")
+          {:error, {status, body}}
+
+        {:error, reason} ->
+          Logger.error("Salesforce Refresh HTTP Error: #{inspect(reason)}")
+          {:error, reason}
+      end
     end
   end
 end
