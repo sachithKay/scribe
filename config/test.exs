@@ -1,5 +1,8 @@
 import Config
 config :social_scribe, Oban, testing: :manual
+# Intercept all HTTP requests in tests to prevent real API calls (HubSpot, Salesforce, etc.)
+# Each test that makes HTTP calls must set up its own mock via Tesla.Mock.mock/1
+config :tesla, adapter: Tesla.Mock
 
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
