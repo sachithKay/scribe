@@ -23,8 +23,7 @@ defmodule SocialScribeWeb.AuthController do
         "provider" => "google"
       })
       when not is_nil(user) do
-    Logger.info("Google OAuth")
-    Logger.info(auth)
+
 
     case Accounts.find_or_create_user_credential(user, auth) do
       {:ok, _credential} ->
@@ -42,20 +41,18 @@ defmodule SocialScribeWeb.AuthController do
   def callback(%{assigns: %{ueberauth_auth: auth, current_user: user}} = conn, %{
         "provider" => "linkedin"
       }) do
-    Logger.info("LinkedIn OAuth")
-    Logger.info(auth)
+
 
     case Accounts.find_or_create_user_credential(user, auth) do
       {:ok, credential} ->
-        Logger.info("credential")
-        Logger.info(credential)
+
 
         conn
         |> put_flash(:info, "LinkedIn account added successfully.")
         |> redirect(to: ~p"/dashboard/settings")
 
       {:error, reason} ->
-        Logger.error(reason)
+
 
         conn
         |> put_flash(:error, "Could not add LinkedIn account.")
@@ -67,8 +64,7 @@ defmodule SocialScribeWeb.AuthController do
         "provider" => "facebook"
       })
       when not is_nil(user) do
-    Logger.info("Facebook OAuth")
-    Logger.info(auth)
+
 
     case Accounts.find_or_create_user_credential(user, auth) do
       {:ok, credential} ->
@@ -124,8 +120,7 @@ defmodule SocialScribeWeb.AuthController do
         "provider" => "hubspot"
       })
       when not is_nil(user) do
-    Logger.info("HubSpot OAuth")
-    Logger.info(inspect(auth))
+
 
     hub_id = to_string(auth.uid)
 
@@ -162,8 +157,7 @@ defmodule SocialScribeWeb.AuthController do
         "provider" => "salesforce"
       })
       when not is_nil(user) do
-    Logger.info("Salesforce OAuth")
-    Logger.info(inspect(auth))
+
 
     salesforce_uid = to_string(auth.uid)
 
@@ -198,8 +192,7 @@ defmodule SocialScribeWeb.AuthController do
   end
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
-    Logger.info("Google OAuth Login")
-    Logger.info(auth)
+
 
     case Accounts.find_or_create_user_from_oauth(auth) do
       {:ok, user} ->

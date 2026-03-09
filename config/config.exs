@@ -90,7 +90,11 @@ config :ueberauth, Ueberauth,
          prompt: "consent"
        ]},
     linkedin:
-      {SocialScribe.Ueberauth.Strategy.LinkedIn, []},
+      {SocialScribe.Ueberauth.Strategy.LinkedIn,
+       [
+         # Note: Scopes are also defined as defaults in SocialScribe.Ueberauth.Strategy.LinkedIn
+         default_scope: "openid profile email w_member_social"
+       ]},
     facebook:
       {Ueberauth.Strategy.Facebook,
        [

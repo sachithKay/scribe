@@ -73,11 +73,11 @@ defmodule SocialScribe.CRM.Salesforce do
           {:ok, contacts}
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
-          Logger.error("Salesforce Search API Error (Status: #{status}): #{inspect(body)}")
+
           {:error, {:api_error, status, body}}
 
         {:error, reason} ->
-          Logger.error("Salesforce Search HTTP Error: #{inspect(reason)}")
+
           {:error, {:http_error, reason}}
       end
     end)
@@ -220,7 +220,7 @@ defmodule SocialScribe.CRM.Salesforce do
       {:ok, valid_cred} ->
         case api_call.(valid_cred) do
           {:error, {:api_error, 401, _body}} ->
-            Logger.debug("Salesforce token expired (401), refreshing and retrying...")
+
             retry_with_fresh_token(valid_cred, api_call)
           other ->
             other
@@ -236,7 +236,6 @@ defmodule SocialScribe.CRM.Salesforce do
         # Retry the call
         api_call.(refreshed_credential)
       {:error, refresh_error} ->
-        Logger.error("Failed to refresh Salesforce token: #{inspect(refresh_error)}")
         {:error, {:token_refresh_failed, refresh_error}}
     end
   end
@@ -260,7 +259,6 @@ defmodule SocialScribe.CRM.Salesforce do
 
     # Diagnostic: Check for missing config
     if is_nil(client_id) || is_nil(client_secret) do
-      Logger.error("Salesforce Refresh Failed: SALESFORCE_CLIENT_ID or SECRET is missing from config.")
       {:error, :missing_config}
     else
       # Determine the auth host. Standard is login.salesforce.com. 
@@ -299,13 +297,9 @@ defmodule SocialScribe.CRM.Salesforce do
           SocialScribe.Accounts.update_user_credential(credential, attrs)
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
-          # invalid_grant often means the refresh_token belongs to a DIFFERENT Client ID 
-          # (e.g. from local .env while database is shared with Prod)
-          Logger.error("Salesforce Refresh Failed (Status: #{status}): #{inspect(body)}. Hint: Ensure Client ID in Fly.io matches the one used to connect this account.")
           {:error, {status, body}}
 
         {:error, reason} ->
-          Logger.error("Salesforce Refresh HTTP Error: #{inspect(reason)}")
           {:error, reason}
       end
     end
