@@ -42,3 +42,8 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Salesforce Test Config
+config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
+  client_id: "test_client_id",
+  client_secret: "test_client_secret"

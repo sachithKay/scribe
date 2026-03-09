@@ -6,6 +6,12 @@ defmodule SocialScribe.CRM.SalesforceTest do
   alias SocialScribe.CRM.Salesforce
 
   setup do
+    # Ensure config is set for tests (even if runtime.exs tried to override)
+    Application.put_env(:ueberauth, Ueberauth.Strategy.Salesforce.OAuth, [
+      client_id: "test_client_id",
+      client_secret: "test_client_secret"
+    ])
+
     user = user_fixture()
 
     credential = salesforce_credential_fixture(%{
@@ -25,8 +31,8 @@ defmodule SocialScribe.CRM.SalesforceTest do
 
   describe "search_contacts/2" do
     test "successfully fetches and maps contacts to normalized keys", %{credential: credential} do
-      mock(fn env ->
-        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") do
+      mock_global(fn env ->
+        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") do
           json(%{
             "records" => [
               %{
@@ -56,7 +62,7 @@ defmodule SocialScribe.CRM.SalesforceTest do
 
     test "returns :api_error on non-200 response", %{credential: credential} do
       mock(fn env ->
-        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") do
+        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") do
           json(%{"message" => "Server Error"}, status: 500)
         end
       end)
@@ -67,7 +73,7 @@ defmodule SocialScribe.CRM.SalesforceTest do
 
     test "returns :http_error on Tesla transport failure", %{credential: credential} do
       mock(fn env ->
-        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") do
+        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") do
           {:error, :econnrefused}
         end
       end)
@@ -81,15 +87,18 @@ defmodule SocialScribe.CRM.SalesforceTest do
         expires_at: DateTime.utc_now() |> DateTime.add(-100, :second)
       }
 
-      mock(fn env ->
+      mock_global(fn env ->
         cond do
+          # Salesforce Token Refresh URL
           env.method == :post and String.contains?(env.url, "/services/oauth2/token") ->
             json(%{
               "access_token" => "refreshed_token",
-              "instance_url" => "https://my-salesforce-instance.com"
+              "instance_url" => "https://my-salesforce-instance.com",
+              "expires_in" => 3600
             })
 
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          # Salesforce Query URL
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             # Verify that the refreshed token was used
             assert {"Authorization", "Bearer refreshed_token"} in env.headers
             json(%{"records" => []})
@@ -311,7 +320,7 @@ defmodule SocialScribe.CRM.SalesforceTest do
               "instance_url" => "https://my-salesforce-instance.com"
             })
 
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             count = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
             if count == 0 do
               # First call → 401 to trigger refresh

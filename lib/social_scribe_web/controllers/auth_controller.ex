@@ -44,14 +44,14 @@ defmodule SocialScribeWeb.AuthController do
 
 
     case Accounts.find_or_create_user_credential(user, auth) do
-      {:ok, credential} ->
+      {:ok, _credential} ->
 
 
         conn
         |> put_flash(:info, "LinkedIn account added successfully.")
         |> redirect(to: ~p"/dashboard/settings")
 
-      {:error, reason} ->
+      {:error, _reason} ->
 
 
         conn

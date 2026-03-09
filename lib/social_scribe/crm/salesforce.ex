@@ -8,13 +8,13 @@ defmodule SocialScribe.CRM.Salesforce do
   @behaviour SocialScribe.CRM
 
   alias SocialScribe.Accounts.UserCredential
+  alias SocialScribe.Accounts
   require Logger
+
+  @default_token_expiry_seconds 7200
 
   @impl true
   def provider_name, do: :salesforce
-
-  # Default token lifetime to assume when Salesforce doesn't return expires_in
-  @default_token_expiry_seconds 7200
 
   # Adjust properties as per standard Salesforce Contact object
   @contact_properties [
@@ -45,12 +45,7 @@ defmodule SocialScribe.CRM.Salesforce do
     ])
   end
 
-  defp token_client do
-    Tesla.client([
-      {Tesla.Middleware.FormUrlencoded, encode: &Plug.Conn.Query.encode/1, decode: &Plug.Conn.Query.decode/1},
-      Tesla.Middleware.JSON
-    ])
-  end
+  # --- CRM Behaviour Implementation ---
 
   @doc """
   Searches for contacts by query string using SOSL or SOQL.
@@ -73,11 +68,9 @@ defmodule SocialScribe.CRM.Salesforce do
           {:ok, contacts}
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
-
           {:error, {:api_error, status, body}}
 
         {:error, reason} ->
-
           {:error, {:http_error, reason}}
       end
     end)
@@ -140,8 +133,6 @@ defmodule SocialScribe.CRM.Salesforce do
 
     # Strip out fields that Salesforce Contacts strictly don't have (website/company)
     # AND strip out State/Country to avoid FIELD_INTEGRITY_EXCEPTION from Org Picklist Validation rules.
-    # The safest best-practice approach for broad Integrations without Org Metadata access is to
-    # omit state/country fields or require the user to manually configure state mapping.
     sf_updates_clean = Map.drop(sf_updates, [
       "website", 
       "company", 
@@ -190,6 +181,8 @@ defmodule SocialScribe.CRM.Salesforce do
     end
   end
 
+  # --- Data Formatting ---
+
   # Format a Salesforce contact response into the generic structure used by SocialScribe modals
   defp format_contact(properties) when is_map(properties) do
     %{
@@ -214,13 +207,24 @@ defmodule SocialScribe.CRM.Salesforce do
   end
   defp format_contact(_), do: nil
 
+  # --- Token Refresh Logic ---
+  # NOTE: To maintain architectural symmetry with HubSpot, token refresh logic is kept within this module.
+  # While extracting this to a separate utility module (e.g., SocialScribe.SalesforceTokenRefresher) 
+  # is a valid alternative for stricter separation of concerns, we've prioritized a consistent 
+  # pattern across all CRM providers.
+
+  @doc """
+  Public entry point for proactive token refresh by background workers.
+  Returns `{:ok, updated_credential}` or `{:error, reason}`.
+  """
+  def refresh_token(credential), do: refresh_credential(credential)
+
   # Wrapper that handles token refresh on auth errors
   defp with_token_refresh(%UserCredential{} = credential, api_call) do
     case ensure_valid_token(credential) do
       {:ok, valid_cred} ->
         case api_call.(valid_cred) do
           {:error, {:api_error, 401, _body}} ->
-
             retry_with_fresh_token(valid_cred, api_call)
           other ->
             other
@@ -240,7 +244,7 @@ defmodule SocialScribe.CRM.Salesforce do
     end
   end
 
-  defp ensure_valid_token(credential) do
+  defp ensure_valid_token(%UserCredential{} = credential) do
     buffer_seconds = 300
     if DateTime.compare(
          credential.expires_at,
@@ -252,17 +256,14 @@ defmodule SocialScribe.CRM.Salesforce do
     end
   end
 
-  defp refresh_credential(credential) do
+  defp refresh_credential(%UserCredential{} = credential) do
     config = Application.get_env(:ueberauth, Ueberauth.Strategy.Salesforce.OAuth, [])
     client_id = config[:client_id]
     client_secret = config[:client_secret]
 
-    # Diagnostic: Check for missing config
     if is_nil(client_id) || is_nil(client_secret) do
       {:error, :missing_config}
     else
-      # Determine the auth host. Standard is login.salesforce.com. 
-      # Sandboxes and some Orgs require test.salesforce.com.
       auth_host = 
         if String.contains?(credential.instance_url || "", ["sandbox", "--"]) do
           "test.salesforce.com"
@@ -281,7 +282,6 @@ defmodule SocialScribe.CRM.Salesforce do
 
       case Tesla.post(token_client(), url, body) do
         {:ok, %Tesla.Env{status: 200, body: response}} ->
-          # Use expires_in from response if available, otherwise fallback to default
           expires_in = response["expires_in"] || @default_token_expiry_seconds
           
           attrs = %{
@@ -289,19 +289,37 @@ defmodule SocialScribe.CRM.Salesforce do
             expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
           }
 
-          # The refresh_token might not be returned again via SF if existing is good
+          # Update optional fields if returned
           attrs = if response["refresh_token"], do: Map.put(attrs, :refresh_token, response["refresh_token"]), else: attrs
-          # Ensure instance_url is preserved
           attrs = if response["instance_url"], do: Map.put(attrs, :instance_url, response["instance_url"]), else: attrs
 
-          SocialScribe.Accounts.update_user_credential(credential, attrs)
+          Accounts.update_user_credential(credential, attrs)
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
+          Logger.error("Salesforce refresh failed (Status: #{status}): #{inspect(body)}")
           {:error, {status, body}}
 
         {:error, reason} ->
+          Logger.error("Salesforce refresh network error: #{inspect(reason)}")
           {:error, reason}
       end
     end
+  end
+
+  defp token_client do
+    Tesla.client([
+      {Tesla.Middleware.FormUrlencoded, encode: &Plug.Conn.Query.encode/1, decode: &Plug.Conn.Query.decode/1},
+      Tesla.Middleware.JSON,
+      {Tesla.Middleware.Retry,
+       delay: 500,
+       max_retries: 3,
+       max_delay: 10_000,
+       use_retry_after_header: true,
+       should_retry: fn
+         {:ok, %Tesla.Env{status: status}}, _env, _ctx when status in [429, 503] -> true
+         {:ok, _}, _env, _ctx -> false
+         {:error, _}, _env, _ctx -> true
+       end}
+    ])
   end
 end
