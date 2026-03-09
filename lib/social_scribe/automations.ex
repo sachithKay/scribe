@@ -18,6 +18,14 @@ defmodule SocialScribe.Automations do
   end
 
   @doc """
+  Returns the list of all automations (active and inactive) for a user.
+  """
+  def list_user_automations(user_id) do
+    from(a in Automation, where: a.user_id == ^user_id, order_by: a.name)
+    |> Repo.all()
+  end
+
+  @doc """
   Returns the list of automations.
 
   ## Examples
@@ -45,6 +53,16 @@ defmodule SocialScribe.Automations do
 
   """
   def get_automation!(id), do: Repo.get!(Automation, id)
+
+  @doc """
+  Gets a single automation belonging to a specific user.
+
+  Raises `Ecto.NoResultsError` if the Automation does not exist or belongs to someone else.
+  """
+  def get_user_automation!(user_id, id) do
+    from(a in Automation, where: a.id == ^id and a.user_id == ^user_id)
+    |> Repo.one!()
+  end
 
   @doc """
   Checks if a user can create an automation for a given platform.

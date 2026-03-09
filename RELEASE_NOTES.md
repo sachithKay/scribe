@@ -21,6 +21,7 @@ Thank you for reviewing the **Social Scribe** repository. Below is a summary of 
 ## 🐛 Critical Bug Fixes
 
 * **Google OAuth Refresh Tokens:** Fixed a critical issue where Google was failing to return refresh tokens. Explicitly added `access_type="offline"` and `prompt="consent"` as default parameters to ensure persistent API access.
+* **Automation tenancy** Fixed the issue where all available automations were displayed for all users, without proper tenant isolation.
 * **Facebook Token Longevity:** Implemented support for **long-lived access tokens** in the Facebook authentication strategy, preventing unexpected session expirations for users managing Pages.
 * **CRM Modal UX:** Replaced inline, easy-to-miss errors in the CRM modal with global flash notifications for better user feedback and accessibility.
 * **LinkedIn OIDC Integration:** Implemented a custom LinkedIn authentication strategy using OpenID Connect (OIDC). This replaces the standard `ueberauth_linkedin` library to resolve a critical security flaw where secrets were leaked in GET request query strings, which previously caused authentication to be blocked by modern firewalls.

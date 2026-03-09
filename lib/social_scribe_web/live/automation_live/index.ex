@@ -6,7 +6,7 @@ defmodule SocialScribeWeb.AutomationLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, :automations, Automations.list_automations())}
+    {:ok, assign(socket, :automations, Automations.list_user_automations(socket.assigns.current_user.id))}
   end
 
   @impl true
@@ -17,7 +17,7 @@ defmodule SocialScribeWeb.AutomationLive.Index do
   defp apply_action(socket, :edit, %{"id" => id}) do
     socket
     |> assign(:page_title, "Edit Automation")
-    |> assign(:automation, Automations.get_automation!(id))
+    |> assign(:automation, Automations.get_user_automation!(socket.assigns.current_user.id, id))
   end
 
   defp apply_action(socket, :new, _params) do
@@ -45,7 +45,7 @@ defmodule SocialScribeWeb.AutomationLive.Index do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    automation = Automations.get_automation!(id)
+    automation = Automations.get_user_automation!(socket.assigns.current_user.id, id)
     {:ok, _} = Automations.delete_automation(automation)
 
     {:noreply,
@@ -54,7 +54,7 @@ defmodule SocialScribeWeb.AutomationLive.Index do
 
   @impl true
   def handle_event("toggle_automation", %{"id" => id}, socket) do
-    automation = Automations.get_automation!(id)
+    automation = Automations.get_user_automation!(socket.assigns.current_user.id, id)
 
     case Automations.update_automation(automation, %{is_active: !automation.is_active}) do
       {:ok, updated_automation} ->
