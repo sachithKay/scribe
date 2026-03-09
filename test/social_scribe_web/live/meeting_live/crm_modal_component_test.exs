@@ -40,7 +40,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
     test "searches contacts, renders suggestions, submits updates", %{conn: conn, meeting: meeting} do
       Tesla.Mock.mock(fn env ->
         cond do
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             json(%{
               "records" => [%{
                 "Id" => "SF-001", "FirstName" => "Alice", "LastName" => "Smith",
@@ -147,7 +147,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
     test "clearing the selected contact resets the modal back to search state", %{conn: conn, meeting: meeting} do
       Tesla.Mock.mock(fn env ->
         cond do
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             json(%{
               "records" => [%{
                 "Id" => "SF-001", "FirstName" => "Alice", "LastName" => "Smith",
@@ -209,7 +209,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
     test "toggling a suggestion checkbox updates apply state", %{conn: conn, meeting: meeting} do
       Tesla.Mock.mock(fn env ->
         cond do
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             json(%{
               "records" => [%{
                 "Id" => "SF-002", "FirstName" => "Bob", "LastName" => "Jones",
@@ -269,7 +269,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
     test "submitting form with no apply params is a no-op (fallback clause)", %{conn: conn, meeting: meeting} do
       Tesla.Mock.mock(fn env ->
         cond do
-          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") ->
+          env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") ->
             json(%{"records" => [%{"Id" => "SF-003", "FirstName" => "Carol", "LastName" => "White",
                                    "Email" => "c@example.com", "Title" => "PM"}]})
 
@@ -314,7 +314,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
   describe "select_contact – unknown ID" do
     test "selecting a contact ID not in the contacts list is a no-op", %{conn: conn, meeting: meeting} do
       Tesla.Mock.mock(fn env ->
-        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query/") do
+        if env.method == :get and String.contains?(env.url, "/services/data/v60.0/query") do
           json(%{"records" => [%{"Id" => "SF-004", "FirstName" => "Dan", "LastName" => "Brown",
                                   "Email" => "dan@example.com"}]})
         end
@@ -342,7 +342,7 @@ defmodule SocialScribeWeb.MeetingLive.CrmModalComponentTest do
   # Fixture helper
   # ──────────────────────────────────────────────────────────────────────────
 
-  defp salesforce_credential_fixture(attrs \\ %{}) do
+  defp salesforce_credential_fixture(attrs) do
     attrs
     |> Enum.into(%{
       provider: "salesforce",

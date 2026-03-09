@@ -344,7 +344,7 @@ defmodule SocialScribe.CRM.SalesforceTest do
   # Fixture helper
   # ──────────────────────────────────────────────────────────────────────────
 
-  defp salesforce_credential_fixture(attrs \\ %{}) do
+  defp salesforce_credential_fixture(attrs) do
     attrs
     |> Enum.into(%{
       provider: "salesforce",

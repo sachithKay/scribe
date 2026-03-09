@@ -47,3 +47,8 @@ config :phoenix_live_view,
 config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
   client_id: "test_client_id",
   client_secret: "test_client_secret"
+
+# Dummy keys for AI/Recall tests
+config :social_scribe, :recall_api_key, "test_recall_key"
+config :social_scribe, :recall_region, "us-east-1"
+config :social_scribe, :gemini_api_key, "test_gemini_key"

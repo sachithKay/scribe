@@ -8,7 +8,6 @@ defmodule SocialScribe.CRM.Salesforce do
   @behaviour SocialScribe.CRM
 
   alias SocialScribe.Accounts.UserCredential
-  alias SocialScribe.Accounts
   require Logger
 
   @default_token_expiry_seconds 7200
@@ -293,7 +292,7 @@ defmodule SocialScribe.CRM.Salesforce do
           attrs = if response["refresh_token"], do: Map.put(attrs, :refresh_token, response["refresh_token"]), else: attrs
           attrs = if response["instance_url"], do: Map.put(attrs, :instance_url, response["instance_url"]), else: attrs
 
-          Accounts.update_user_credential(credential, attrs)
+          SocialScribe.Accounts.update_user_credential(credential, attrs)
 
         {:ok, %Tesla.Env{status: status, body: body}} ->
           Logger.error("Salesforce refresh failed (Status: #{status}): #{inspect(body)}")
