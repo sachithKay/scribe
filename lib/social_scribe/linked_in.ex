@@ -33,11 +33,11 @@ defmodule SocialScribe.LinkedIn do
       {:ok, %Tesla.Env{status: status, body: error_body}} ->
         Logger.error("LinkedIn API Error (Status: #{status}): #{inspect(error_body)}")
         message = get_in(error_body, ["message"]) || "Unknown API error"
-        {:error, {:api_error, status, message, error_body}}
+        {:error, {:api_error_posting, status, message, error_body}}
 
       {:error, reason} ->
         Logger.error("LinkedIn HTTP Error: #{inspect(reason)}")
-        {:error, {:http_error, reason}}
+        {:error, {:http_error_posting, reason}}
     end
   end
 

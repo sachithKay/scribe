@@ -9,7 +9,7 @@ import Config
 
 config :social_scribe, Oban,
   engine: Oban.Engines.Basic,
-  notifier: Oban.Notifiers.Postgres,
+  notifier: Oban.Notifiers.PG,
   repo: SocialScribe.Repo,
   queues: [
     default: 10,
@@ -21,7 +21,8 @@ config :social_scribe, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        {"*/2 * * * *", SocialScribe.Workers.BotStatusPoller},
-       {"*/5 * * * *", SocialScribe.Workers.HubspotTokenRefresher}
+       {"*/5 * * * *", SocialScribe.Workers.HubspotTokenRefresher},
+       {"*/5 * * * *", SocialScribe.Workers.SalesforceTokenRefresher}
      ]}
   ]
 
@@ -86,10 +87,15 @@ config :ueberauth, Ueberauth,
       {Ueberauth.Strategy.Google,
        [
          default_scope: "email profile https://www.googleapis.com/auth/calendar.readonly",
-         extra_params: [access_type: "offline", prompt: "consent"]
+         access_type: "offline",
+         prompt: "consent"
        ]},
     linkedin:
-      {Ueberauth.Strategy.LinkedIn, [default_scope: "openid profile email w_member_social"]},
+      {SocialScribe.Ueberauth.Strategy.LinkedIn,
+       [
+         # Note: Scopes are also defined as defaults in SocialScribe.Ueberauth.Strategy.LinkedIn
+         default_scope: "openid profile email w_member_social"
+       ]},
     facebook:
       {Ueberauth.Strategy.Facebook,
        [
@@ -99,6 +105,12 @@ config :ueberauth, Ueberauth,
       {Ueberauth.Strategy.Hubspot,
        [
          default_scope: "crm.objects.contacts.read crm.objects.contacts.write oauth"
+       ]},
+    salesforce:
+      {Ueberauth.Strategy.Salesforce,
+       [
+         default_scope: "api refresh_token offline_access",
+         prompt: "login consent"
        ]}
   ]
 

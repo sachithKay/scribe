@@ -1,7 +1,7 @@
-defmodule SocialScribe.HubspotSuggestionsTest do
+defmodule SocialScribe.CRMSuggestionsTest do
   use SocialScribe.DataCase
 
-  alias SocialScribe.HubspotSuggestions
+  alias SocialScribe.CRMSuggestions
 
   describe "merge_with_contact/2" do
     test "merges suggestions with contact data and filters unchanged values" do
@@ -33,7 +33,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         email: "test@example.com"
       }
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CRMSuggestions.merge_with_contact(suggestions, contact)
 
       # Only phone should remain since company already matches
       assert length(result) == 1
@@ -59,7 +59,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         email: "test@example.com"
       }
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CRMSuggestions.merge_with_contact(suggestions, contact)
 
       assert result == []
     end
@@ -67,7 +67,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
     test "handles empty suggestions list" do
       contact = %{id: "123", email: "test@example.com"}
 
-      result = HubspotSuggestions.merge_with_contact([], contact)
+      result = CRMSuggestions.merge_with_contact([], contact)
 
       assert result == []
     end
@@ -89,7 +89,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
 
       contact = %{id: "123", phone: nil}
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CRMSuggestions.merge_with_contact(suggestions, contact)
 
       assert hd(result).label == "Phone"
     end

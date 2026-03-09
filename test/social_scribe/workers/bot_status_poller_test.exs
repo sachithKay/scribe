@@ -90,7 +90,7 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
         })
 
       expect(RecallApiMock, :get_bot, fn "bot-pending-123" ->
-        {:ok, %Tesla.Env{body: @mock_bot_api_info_pending}}
+        {:ok, %Tesla.Env{status: 200, body: @mock_bot_api_info_pending}}
       end)
 
       assert BotStatusPoller.perform(%Oban.Job{}) == :ok
@@ -116,7 +116,7 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
       # Expect API call to get bot status
       expect(RecallApiMock, :get_bot, fn "bot-done-456" ->
         # Returns "done"
-        {:ok, %Tesla.Env{body: @mock_bot_api_info_done}}
+        {:ok, %Tesla.Env{status: 200, body: Map.put(@mock_bot_api_info_done, :status_changes, [%{code: "done"}])}}
       end)
 
       # Expect API call to get transcript
@@ -189,8 +189,10 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
       # Expect API call to get bot status
       expect(RecallApiMock, :get_bot, fn "bot-already-processed-789" ->
         # Simulate Recall API still reporting it as "done"
-        {:ok,
-         %Tesla.Env{body: Map.put(@mock_bot_api_info_done, "id", "bot-already-processed-789")}}
+        bot_info = @mock_bot_api_info_done
+                   |> Map.put(:id, "bot-already-processed-789")
+                   |> Map.put(:status_changes, [%{code: "done"}])
+        {:ok, %Tesla.Env{status: 200, body: bot_info}}
       end)
 
       # CRUCIALLY: Do NOT expect get_bot_transcript to be called again
@@ -209,6 +211,58 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
         Repo.all(from m in Meetings.Meeting, where: m.recall_bot_id == ^bot_record_id)
 
       assert Enum.count(meetings_for_bot) == 1
+    end
+
+    test "handles terminal state 'media_expired' and marks bot as error" do
+      user = user_fixture()
+      calendar_event = calendar_event_fixture(%{user_id: user.id})
+
+      bot_record =
+        recall_bot_fixture(%{
+          user_id: user.id,
+          calendar_event_id: calendar_event.id,
+          recall_bot_id: "bot-expired-999",
+          status: "recording_done"
+        })
+
+      expect(RecallApiMock, :get_bot, fn "bot-expired-999" ->
+        bot_info = @mock_bot_api_info_done
+                   |> Map.put(:id, "bot-expired-999")
+                   |> Map.put(:status_changes, [%{code: "media_expired"}])
+        {:ok, %Tesla.Env{status: 200, body: bot_info}}
+      end)
+
+      # Should not call get_bot_transcript
+      assert BotStatusPoller.perform(%Oban.Job{}) == :ok
+
+      updated_bot = Bots.get_recall_bot!(bot_record.id)
+      assert updated_bot.status == "error"
+      assert Meetings.get_meeting_by_recall_bot_id(updated_bot.id) == nil
+    end
+
+    test "handles terminal state 'fatal' and marks bot as error" do
+      user = user_fixture()
+      calendar_event = calendar_event_fixture(%{user_id: user.id})
+
+      bot_record =
+        recall_bot_fixture(%{
+          user_id: user.id,
+          calendar_event_id: calendar_event.id,
+          recall_bot_id: "bot-fatal-999",
+          status: "joining_call"
+        })
+
+      expect(RecallApiMock, :get_bot, fn "bot-fatal-999" ->
+        bot_info = @mock_bot_api_info_done
+                   |> Map.put(:id, "bot-fatal-999")
+                   |> Map.put(:status_changes, [%{code: "fatal"}])
+        {:ok, %Tesla.Env{status: 200, body: bot_info}}
+      end)
+
+      assert BotStatusPoller.perform(%Oban.Job{}) == :ok
+
+      updated_bot = Bots.get_recall_bot!(bot_record.id)
+      assert updated_bot.status == "error"
     end
 
     test "handles API error when polling bot status and updates bot to 'polling_error'" do
@@ -249,8 +303,10 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
 
       # Expect API call to get bot status (returns "done")
       expect(RecallApiMock, :get_bot, fn "bot-transcript-error-111" ->
-        {:ok,
-         %Tesla.Env{body: Map.put(@mock_bot_api_info_done, "id", "bot-transcript-error-111")}}
+        bot_info = @mock_bot_api_info_done
+                   |> Map.put(:id, "bot-transcript-error-111")
+                   |> Map.put(:status_changes, [%{code: "done"}])
+        {:ok, %Tesla.Env{status: 200, body: bot_info}}
       end)
 
       # Expect API call to get transcript to FAIL
@@ -260,9 +316,11 @@ defmodule SocialScribe.Workers.BotStatusPollerTest do
 
       assert BotStatusPoller.perform(%Oban.Job{}) == :ok
 
-      # Bot status should still be "done" because the get_bot call succeeded
+      # Bot status should still be "done" because the meeting creation was intended to fail
+      # Note: we specifically wait to convert "recording_done" to "done" until the meeting is
+      # completely built, so the Poller should not have updated the status.
       updated_bot = Bots.get_recall_bot!(bot_record.id)
-      assert updated_bot.status == "done"
+      assert updated_bot.status == "recording_done"
 
       # No meeting record should have been created because transcript fetching failed
       assert Meetings.get_meeting_by_recall_bot_id(updated_bot.id) == nil

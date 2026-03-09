@@ -1,5 +1,8 @@
 import Config
 config :social_scribe, Oban, testing: :manual
+# Intercept all HTTP requests in tests to prevent real API calls (HubSpot, Salesforce, etc.)
+# Each test that makes HTTP calls must set up its own mock via Tesla.Mock.mock/1
+config :tesla, adapter: Tesla.Mock
 
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
@@ -39,3 +42,13 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Salesforce Test Config
+config :ueberauth, Ueberauth.Strategy.Salesforce.OAuth,
+  client_id: "test_client_id",
+  client_secret: "test_client_secret"
+
+# Dummy keys for AI/Recall tests
+config :social_scribe, :recall_api_key, "test_recall_key"
+config :social_scribe, :recall_region, "us-east-1"
+config :social_scribe, :gemini_api_key, "test_gemini_key"

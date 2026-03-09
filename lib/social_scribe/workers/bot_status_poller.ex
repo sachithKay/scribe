@@ -24,21 +24,30 @@ defmodule SocialScribe.Workers.BotStatusPoller do
 
   defp poll_and_process_bot(bot_record) do
     case RecallApi.get_bot(bot_record.recall_bot_id) do
-      {:ok, %Tesla.Env{body: bot_api_info}} ->
+      {:ok, %Tesla.Env{body: bot_api_info, status: status_code}} when status_code in 200..299 ->
+        status_changes = Map.get(bot_api_info, :status_changes, [])
         new_status =
-          bot_api_info
-          |> Map.get(:status_changes)
-          |> List.last()
-          |> Map.get(:code)
+          if Enum.empty?(status_changes),
+            do: bot_record.status,
+            else: status_changes |> List.last() |> Map.get(:code)
 
-        {:ok, updated_bot_record} = Bots.update_recall_bot(bot_record, %{status: new_status})
 
-        if new_status == "done" &&
-             is_nil(Meetings.get_meeting_by_recall_bot_id(updated_bot_record.id)) do
-          process_completed_bot(updated_bot_record, bot_api_info)
-        else
-          if new_status != bot_record.status do
-            Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
+        if new_status && new_status != bot_record.status do
+          cond do
+            new_status == "done" && is_nil(Meetings.get_meeting_by_recall_bot_id(bot_record.id)) ->
+              # Process first — only mark "done" after successful meeting creation
+              process_completed_bot(bot_record, bot_api_info)
+
+            new_status in ["fatal", "media_expired"] ->
+              # These are terminal states where no transcript is available.
+              # Mark them as error so we stop polling them.
+              {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "error"})
+              Logger.warning("Bot #{bot_record.recall_bot_id} reached terminal state '#{new_status}', marking as error.")
+
+            true ->
+              # Normal non-terminal state update (e.g., in_call, joining)
+              {:ok, _} = Bots.update_recall_bot(bot_record, %{status: new_status})
+              Logger.info("Bot #{bot_record.recall_bot_id} status updated to: #{new_status}")
           end
         end
 
@@ -61,6 +70,9 @@ defmodule SocialScribe.Workers.BotStatusPoller do
 
       case Meetings.create_meeting_from_recall_data(bot_record, bot_api_info, transcript_data, participants_data) do
         {:ok, meeting} ->
+          # Mark bot as done only AFTER meeting is successfully created
+          {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "done"})
+
           Logger.info(
             "Successfully created meeting record #{meeting.id} from bot #{bot_record.recall_bot_id}"
           )
@@ -74,8 +86,14 @@ defmodule SocialScribe.Workers.BotStatusPoller do
           Logger.error(
             "Failed to create meeting record from bot #{bot_record.recall_bot_id}: #{inspect(reason)}"
           )
+          # Bot status remains unchanged — poller will retry on the next cycle
       end
     else
+      {:error, :no_recordings} ->
+        # If there are no recordings, the meeting likely never started. 
+        # We mark it as "error" so the poller stops trying to fetch data in an infinite loop.
+        Logger.warning("Bot #{bot_record.recall_bot_id} completed but had no recordings. Marking as error.")
+        {:ok, _} = Bots.update_recall_bot(bot_record, %{status: "error"})
       {:error, reason} ->
         Logger.error(
           "Failed to fetch data for bot #{bot_record.recall_bot_id} after completion: #{inspect(reason)}"

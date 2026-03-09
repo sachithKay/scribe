@@ -2,6 +2,8 @@ defmodule SocialScribeWeb.MeetingLive.DraftPostFormComponent do
   use SocialScribeWeb, :live_component
   import SocialScribeWeb.ClipboardButton
 
+  require Logger
+
   alias SocialScribe.Poster
 
   @impl true
@@ -79,10 +81,38 @@ defmodule SocialScribeWeb.MeetingLive.DraftPostFormComponent do
 
         {:noreply, socket}
 
-      {:error, error} ->
+      {:error, {:api_error_posting, status, message, _body}} ->
         socket =
           socket
-          |> put_flash(:error, error)
+          |> put_flash(:error, "Failed to post (#{status}): #{message}")
+          |> push_patch(to: socket.assigns.patch)
+
+        {:noreply, socket}
+
+      {:error, {:http_error_posting, reason}} ->
+        Logger.error("Social post network error: #{inspect(reason)}")
+
+        socket =
+          socket
+          |> put_flash(:error, "Could not reach the social media service. Please try again.")
+          |> push_patch(to: socket.assigns.patch)
+
+        {:noreply, socket}
+
+      {:error, reason} when is_binary(reason) ->
+        socket =
+          socket
+          |> put_flash(:error, reason)
+          |> push_patch(to: socket.assigns.patch)
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        Logger.error("Unexpected social post error: #{inspect(reason)}")
+
+        socket =
+          socket
+          |> put_flash(:error, "Something went wrong. Please try again.")
           |> push_patch(to: socket.assigns.patch)
 
         {:noreply, socket}

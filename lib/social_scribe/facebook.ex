@@ -55,13 +55,66 @@ defmodule SocialScribe.Facebook do
         {:ok, valid_pages}
 
       {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "Failed to fetch user pages: #{status} - #{body}"}
+        {:error, "Failed to fetch user pages: #{status} - #{inspect(body)}"}
+
+      {:error, reason} ->
+        Logger.error("Facebook fetch_user_pages HTTP error: #{inspect(reason)}")
+        {:error, "Network error fetching pages"}
     end
   end
 
+  @doc """
+  Exchanges a short-lived user access token (1 hour) for a long-lived token (~60 days).
+
+  This is Meta's documented best practice. Critically, when you subsequently call
+  `/accounts` (fetch_user_pages) using a long-lived user token, the returned
+  page_access_token for each page is **permanent** (never expires).
+
+  Uses POST with a form-encoded body (not GET query params) so that `app_secret`
+  and the exchange token are never written to server access logs or HTTP proxy logs.
+
+  See: https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
+  """
+  @impl SocialScribe.FacebookApi
+  def exchange_for_long_lived_token(short_lived_token, app_id, app_secret) do
+    params = [
+      grant_type: "fb_exchange_token",
+      client_id: app_id,
+      client_secret: app_secret,
+      fb_exchange_token: short_lived_token
+    ]
+
+    case Tesla.post(form_client(), "/oauth/access_token", params) do
+      {:ok, %Tesla.Env{status: 200, body: %{"access_token" => long_lived_token}}} ->
+        Logger.info("Successfully exchanged Facebook short-lived token for long-lived token")
+        {:ok, long_lived_token}
+
+      {:ok, %Tesla.Env{status: status, body: error_body}} ->
+        message = get_in(error_body, ["error", "message"]) || "Unknown error"
+        Logger.error("Facebook token exchange failed (#{status}): #{message}")
+        {:error, "Token exchange failed: #{message}"}
+
+      {:error, reason} ->
+        Logger.error("Facebook token exchange HTTP error: #{inspect(reason)}")
+        {:error, "Network error during token exchange"}
+    end
+  end
+
+  # Standard JSON client for Graph API calls
   defp client do
     Tesla.client([
       {Tesla.Middleware.BaseUrl, @base_url},
+      Tesla.Middleware.JSON
+    ])
+  end
+
+  # Form-encoded client used for the token exchange endpoint.
+  # Credentials are sent in the POST body, NOT in the URL query string,
+  # so they never appear in access logs.
+  defp form_client do
+    Tesla.client([
+      {Tesla.Middleware.BaseUrl, @base_url},
+      Tesla.Middleware.FormUrlencoded,
       Tesla.Middleware.JSON
     ])
   end

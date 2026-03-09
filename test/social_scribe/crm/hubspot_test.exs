@@ -1,7 +1,7 @@
 defmodule SocialScribe.HubspotApiTest do
   use SocialScribe.DataCase
 
-  alias SocialScribe.HubspotApi
+  alias SocialScribe.CRM.Hubspot
 
   import SocialScribe.AccountsFixtures
 
@@ -12,7 +12,7 @@ defmodule SocialScribe.HubspotApiTest do
       credential = hubspot_credential_fixture(%{user_id: user.id})
 
       # apply_updates with empty list should return :no_updates
-      {:ok, :no_updates} = HubspotApi.apply_updates(credential, "123", [])
+      {:ok, :no_updates} = Hubspot.apply_updates(credential, "123", [])
     end
 
     test "apply_updates/3 filters only updates with apply: true" do
@@ -24,7 +24,7 @@ defmodule SocialScribe.HubspotApiTest do
         %{field: "email", new_value: "test@example.com", apply: false}
       ]
 
-      {:ok, :no_updates} = HubspotApi.apply_updates(credential, "123", updates)
+      {:ok, :no_updates} = Hubspot.apply_updates(credential, "123", updates)
     end
   end
 

@@ -13,12 +13,12 @@ defmodule SocialScribeWeb.AutomationLive.Show do
     {:noreply,
      socket
      |> assign(:page_title, page_title(socket.assigns.live_action))
-     |> assign(:automation, Automations.get_automation!(id))}
+     |> assign(:automation, Automations.get_user_automation!(socket.assigns.current_user.id, id))}
   end
 
   @impl true
   def handle_event("toggle_automation", %{"id" => id}, socket) do
-    automation = Automations.get_automation!(id)
+    automation = Automations.get_user_automation!(socket.assigns.current_user.id, id)
 
     case Automations.update_automation(automation, %{is_active: !automation.is_active}) do
       {:ok, updated_automation} ->

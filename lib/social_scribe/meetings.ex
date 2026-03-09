@@ -344,7 +344,8 @@ defmodule SocialScribe.Meetings do
   This should be called when a bot's status is "done".
   """
   def create_meeting_from_recall_data(%RecallBot{} = recall_bot, bot_api_info, transcript_data, participants_data) do
-    calendar_event = Repo.preload(recall_bot, :calendar_event).calendar_event
+    recall_bot = Repo.preload(recall_bot, :calendar_event)
+    calendar_event = recall_bot.calendar_event
 
     Repo.transaction(fn ->
       meeting_attrs = parse_meeting_attrs(calendar_event, recall_bot, bot_api_info)
